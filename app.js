@@ -3770,23 +3770,32 @@ class Stage4UI {
   }
 
   bind() {
-    document.addEventListener("click", (event) => {
-      const open = event.target.closest("[data-stage4-open]");
-      if (open) {
-        this.game.encounter.start();
-        return;
-      }
+    // Os controles do Ato IV ficam isolados no próprio overlay.
+    // Isso evita que outro sistema global consuma/intercepte o clique.
+    const choiceContainer = this.overlay.querySelector("#stage4ChoiceContainer");
 
-      if (event.target.closest("[data-stage4-close]")) {
-        this.close();
-        return;
-      }
+    choiceContainer.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-stage4-choice]");
+      if (!button || !choiceContainer.contains(button) || button.disabled) return;
 
-      const choice = event.target.closest("[data-stage4-choice]");
-      if (choice) {
-        this.game.encounter.choose(choice.dataset.stage4Choice);
-        return;
-      }
+      event.preventDefault();
+      event.stopPropagation();
+
+      const choiceId = button.dataset.stage4Choice;
+      if (!choiceId || !this.game.encounter) return;
+
+      choiceContainer.querySelectorAll("[data-stage4-choice]").forEach((item) => {
+        item.disabled = true;
+        item.setAttribute("aria-disabled", "true");
+      });
+
+      button.classList.add("is-selected");
+      this.game.visualLab?.record(
+        "CHOICE",
+        "EncounterNarrativeManager.choose()",
+        `Escolha do Ato IV: ${choiceId}`
+      );
+      this.game.encounter.choose(choiceId);
     });
 
     this.overlay.addEventListener("click", (event) => {
@@ -3795,23 +3804,44 @@ class Stage4UI {
       }
     });
 
-    this.game.ui.refs.dialogueContinueButton.addEventListener("click", () => {
-      // Não interfere no sistema principal; o encontro possui seus próprios controles.
-    });
-
-    document.getElementById("stage4Continue").addEventListener("click", () => {
+    document.getElementById("stage4Continue").addEventListener("click", (event) => {
+      event.preventDefault();
       this.game.encounter.continue();
     });
 
-    document.getElementById("stage4Skip").addEventListener("click", () => {
+    document.getElementById("stage4Skip").addEventListener("click", (event) => {
+      event.preventDefault();
       const skipped = this.game.encounter.skipTyping();
       if (!skipped) this.game.encounter.continue();
     });
 
-    document.getElementById("stage4ResultContinue").addEventListener("click", () => {
+    document.getElementById("stage4ResultContinue").addEventListener("click", (event) => {
+      event.preventDefault();
       this.hideResult();
+      this.game.visualLab?.record(
+        "CHOICE_RESULT",
+        "Stage4UI.continueResult()",
+        "Consequência aceita; avançando para o próximo diálogo."
+      );
       this.game.encounter.renderCurrent();
     });
+
+    // Atalhos 1–9 para escolhas narrativas, úteis quando o botão físico estiver
+    // sendo coberto por outra camada visual ou quando o usuário estiver usando teclado.
+    this._keyHandler = (event) => {
+      if (this.overlay.hidden || !this.game.state.stage4.active) return;
+      const key = Number(event.key);
+      if (!Number.isInteger(key) || key < 1 || key > 9) return;
+
+      const choices = [...choiceContainer.querySelectorAll("[data-stage4-choice]")];
+      const button = choices[key - 1];
+      if (!button || button.disabled) return;
+
+      event.preventDefault();
+      button.click();
+    };
+
+    document.addEventListener("keydown", this._keyHandler);
   }
 
   open() {
@@ -3858,15 +3888,19 @@ class Stage4UI {
   renderChoices(choices) {
     const container = document.getElementById("stage4ChoiceContainer");
     container.innerHTML = "";
+    container.removeAttribute("aria-hidden");
 
-    for (const choice of choices) {
+    for (const [index, choice] of choices.entries()) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "stage4-choice";
       button.dataset.stage4Choice = choice.id;
+      button.setAttribute("aria-label", `Escolha ${index + 1}: ${choice.label}`);
+      button.setAttribute("data-choice-index", String(index + 1));
+      button.tabIndex = 0;
 
       button.innerHTML = `
-        <span class="stage4-choice-index">${container.children.length + 1}</span>
+        <span class="stage4-choice-index">${index + 1}</span>
         <span>
           <strong>${escapeStage4(choice.label)}</strong>
           <small>${escapeStage4(choice.text)}</small>
@@ -3888,6 +3922,7 @@ class Stage4UI {
     result.hidden = false;
     this.choiceResult = callback;
     this.setChoiceMode(true);
+    document.getElementById("stage4ResultContinue")?.focus();
   }
 
   hideResult() {
