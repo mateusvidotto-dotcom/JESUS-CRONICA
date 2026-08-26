@@ -32,7 +32,7 @@
 
 const APP_CONFIG = Object.freeze({
   gameId: "jesus-chronicles",
-  version: "0.1.0",
+  version: "1.1.0",
   saveKey: "jesus-chronicles-save-v1",
   settingsKey: "jesus-chronicles-settings-v1",
   typingSpeed: 18,
@@ -1074,6 +1074,7 @@ class UIManager {
       "menuSave",
       "menuSettings",
       "menuCodex",
+      "menuVisualLab",
       "menuRestart",
       "settingFastText",
       "settingHighContrast",
@@ -1181,6 +1182,11 @@ class UIManager {
       this.closeOverlay("menuOverlay");
       this.showGameScreen();
       document.querySelector('[data-tab="codexTab"]')?.click();
+    });
+
+    this.refs.menuVisualLab.addEventListener("click", () => {
+      this.closeOverlay("menuOverlay");
+      window.game?.visualLab?.open();
     });
 
     this.refs.menuRestart.addEventListener("click", () => {
@@ -1629,8 +1635,422 @@ class InputManager {
   }
 }
 
+/* ============================================================================
+   11. VISUAL ENGINEERING LAB
+   ----------------------------------------------------------------------------
+   Observabilidade nativa e contextual da interface.
+   Mantém a campanha intacta e funciona como uma ferramenta de inspeção em
+   tempo de execução:
+   - espelho do DOM real;
+   - árvore hierárquica;
+   - CSS computado;
+   - fluxo EVENT → FUNCTION → STATE → DOM → RESULT;
+   - mutações;
+   - auto-testes de integridade;
+   - estados visuais de operação.
+   ============================================================================ */
+
+class VisualLabManager {
+  constructor(game) {
+    this.game = game;
+    this.root = null;
+    this.activeTab = "preview";
+    this.selectedTarget = "#gameMain";
+    this.events = [];
+    this.mutationCount = 0;
+    this.eventCount = 0;
+    this.observerCount = 0;
+    this.started = false;
+    this.renderScheduled = false;
+    this.snapshot = null;
+    this.maxLog = 32;
+  }
+
+  init() {
+    this.root = document.getElementById("visualLabOverlay");
+    if (!this.root) return;
+
+    this.cache();
+    this.bind();
+    this.startObservers();
+    this.started = true;
+    this.record("SYSTEM", "VisualLab.init()", "Laboratório visual inicializado.");
+    this.refresh("INIT");
+  }
+
+  cache() {
+    const ids = [
+      "visualLabLiveDot", "visualLabLiveText", "visualLabAction",
+      "visualLabTarget", "visualLabTimestamp", "visualLabLivePreview",
+      "visualLabSelection", "visualLabEvent", "visualLabFunction",
+      "visualLabState", "visualLabDomUpdate", "visualLabResult",
+      "visualLabContext", "visualLabDomTree", "visualLabCssMetrics",
+      "visualLabJsLog", "visualLabTests", "visualLabObserverCount",
+      "visualLabMutationCount", "visualLabEventCount", "visualLabFooterTarget",
+      "visualLabRefresh", "visualLabClear"
+    ];
+    this.refs = {};
+    for (const id of ids) this.refs[id] = document.getElementById(id);
+    this.tabs = [...this.root.querySelectorAll("[data-lab-tab]")];
+    this.panels = [...this.root.querySelectorAll("[data-lab-panel]")];
+  }
+
+  bind() {
+    this.tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        this.activeTab = tab.dataset.labTab || "preview";
+        this.tabs.forEach((item) => {
+          const active = item === tab;
+          item.classList.toggle("active", active);
+          item.setAttribute("aria-selected", String(active));
+        });
+        this.panels.forEach((panel) => {
+          panel.classList.toggle("active", panel.dataset.labPanel === this.activeTab);
+        });
+        this.refresh(`TAB:${this.activeTab.toUpperCase()}`);
+      });
+    });
+
+    this.refs.visualLabRefresh?.addEventListener("click", () => this.refresh("MANUAL_REFRESH"));
+    this.refs.visualLabClear?.addEventListener("click", () => {
+      this.events = [];
+      this.record("SYSTEM", "clearLog()", "Log visual limpo pelo operador.");
+      this.refresh("CLEAR_LOG");
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        this.toggle();
+      }
+    });
+
+    document.addEventListener("click", (event) => {
+      const target = event.target?.closest?.("button, [role='button'], a, input");
+      if (!target || target.closest("#visualLabOverlay")) return;
+
+      this.eventCount += 1;
+      const label = target.id ? `#${target.id}` :
+        target.getAttribute("aria-label") ||
+        target.textContent?.trim().replace(/\s+/g, " ").slice(0, 48) ||
+        target.tagName.toLowerCase();
+
+      this.selectedTarget = target.id ? `#${target.id}` : label;
+      this.snapshotTarget(target);
+
+      this.record("EVENT", "click()", `Interação detectada em ${this.selectedTarget}.`);
+      this.scheduleRefresh("CLICK");
+    }, true);
+  }
+
+  startObservers() {
+    const appRoot = document.getElementById("gameMain");
+    if (!appRoot) return;
+
+    const observer = new MutationObserver((mutations) => {
+      this.mutationCount += mutations.length;
+      const significant = mutations.some((mutation) =>
+        mutation.type === "childList" ||
+        mutation.type === "attributes" && ["class", "style", "hidden"].includes(mutation.attributeName)
+      );
+
+      if (significant) {
+        const source = mutations[0]?.target instanceof Element
+          ? this.describeNode(mutations[0].target)
+          : "#gameMain";
+
+        this.record("DOM", "MutationObserver", `${mutations.length} mutação(ões) observada(s) em ${source}.`);
+        this.scheduleRefresh("DOM_MUTATION");
+      }
+    });
+
+    observer.observe(appRoot, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["class", "style", "hidden", "aria-selected", "disabled"]
+    });
+
+    this.observerCount += 1;
+    this.domObserver = observer;
+  }
+
+  open() {
+    if (!this.root) return;
+    this.root.hidden = false;
+    this.refresh("OPEN");
+    this.root.querySelector(".visual-lab-tab.active")?.focus({ preventScroll: true });
+  }
+
+  close() {
+    if (this.root) this.root.hidden = true;
+  }
+
+  toggle() {
+    if (!this.root) return;
+    if (this.root.hidden) this.open();
+    else this.close();
+  }
+
+  scheduleRefresh(reason) {
+    if (this.renderScheduled) return;
+    this.renderScheduled = true;
+    window.requestAnimationFrame(() => {
+      this.renderScheduled = false;
+      this.refresh(reason);
+    });
+  }
+
+  record(type, functionName, detail) {
+    this.events.unshift({
+      type,
+      functionName,
+      detail,
+      time: new Date()
+    });
+    this.events = this.events.slice(0, this.maxLog);
+  }
+
+  describeNode(node) {
+    if (!(node instanceof Element)) return "#document";
+    if (node.id) return `#${node.id}`;
+    const classes = [...node.classList].slice(0, 2).map((item) => `.${item}`).join("");
+    return `${node.tagName.toLowerCase()}${classes}`;
+  }
+
+  snapshotTarget(target) {
+    if (!(target instanceof Element)) return;
+    const rect = target.getBoundingClientRect();
+    this.snapshot = {
+      target,
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      x: Math.round(rect.left),
+      y: Math.round(rect.top),
+      time: performance.now()
+    };
+  }
+
+  refresh(reason = "REFRESH") {
+    if (!this.root) return;
+
+    const target = this.resolveTarget();
+    const state = this.game.state || {};
+    const computed = target ? getComputedStyle(target) : null;
+
+    this.refs.visualLabAction.textContent = reason;
+    this.refs.visualLabTarget.textContent = this.describeNode(target);
+    this.refs.visualLabTimestamp.textContent = new Date().toLocaleTimeString("pt-BR");
+    this.refs.visualLabEvent.textContent = this.events[0]?.detail || "aguardando";
+    this.refs.visualLabFunction.textContent = this.events[0]?.functionName || "observação contínua";
+    this.refs.visualLabState.textContent = `${state.phase || "?"} • ${state.world?.actId || "?"}`;
+    this.refs.visualLabDomUpdate.textContent = `${this.mutationCount} mutações`;
+    this.refs.visualLabResult.textContent = target ? "renderização consistente" : "alvo indisponível";
+
+    this.refs.visualLabLiveText.textContent = this.root.hidden ? "PAUSADO" : "OBSERVANDO";
+    this.refs.visualLabLiveDot.classList.toggle("paused", this.root.hidden);
+
+    this.renderContext(state, target);
+    this.renderPreview(target);
+    this.renderDomTree();
+    this.renderCssMetrics(computed, target);
+    this.renderJsLog();
+    this.renderTests();
+    this.renderFooter(target);
+
+    if (target) this.highlightTarget(target);
+  }
+
+  resolveTarget() {
+    if (this.selectedTarget?.startsWith("#")) {
+      return document.getElementById(this.selectedTarget.slice(1)) ||
+        document.querySelector(".world-scene") ||
+        document.getElementById("gameMain");
+    }
+
+    return document.querySelector(".world-scene") ||
+      document.getElementById("gameMain");
+  }
+
+  renderContext(state, target) {
+    const stats = state.player?.stats || {};
+    const missions = state.missions || {};
+    const stageKeys = Object.keys(state).filter((key) => /^stage\d+$/.test(key));
+
+    this.refs.visualLabContext.innerHTML = `
+      <div class="visual-lab-context-card featured">
+        <span>FASE ATUAL</span>
+        <strong>${escapeHtml(String(state.phase || "—"))}</strong>
+        <small>${escapeHtml(String(state.world?.actId || "—"))} • ${escapeHtml(String(state.world?.era || "—"))}</small>
+      </div>
+      <div class="visual-lab-kv">
+        <div><span>ALVO</span><strong>${escapeHtml(this.describeNode(target))}</strong></div>
+        <div><span>LOCAL</span><strong>${escapeHtml(state.world?.locationId || "—")}</strong></div>
+        <div><span>ESTADO DO MUNDO</span><strong>${escapeHtml(state.world?.worldStatus || "—")}</strong></div>
+        <div><span>MISSÕES ATIVAS</span><strong>${Array.isArray(missions.active) ? missions.active.length : 0}</strong></div>
+      </div>
+      <div class="visual-lab-stat-matrix">
+        <div><span>ESPERANÇA</span><strong>${Number(stats.hope ?? 0)}</strong></div>
+        <div><span>LIBERDADE</span><strong>${Number(stats.freedom ?? 0)}</strong></div>
+        <div><span>CONTROLE</span><strong>${Number(stats.control ?? 0)}</strong></div>
+        <div><span>TEMPO</span><strong>${Number(stats.temporalStability ?? 0)}</strong></div>
+      </div>
+      <div class="visual-lab-chip-row">
+        ${stageKeys.length
+          ? stageKeys.slice(0, 9).map((key) => `<span>${escapeHtml(key.toUpperCase())}</span>`).join("")
+          : "<span>CORE</span>"}
+      </div>
+    `;
+  }
+
+  renderPreview(target) {
+    const host = this.refs.visualLabLivePreview;
+    host.innerHTML = "";
+
+    if (target) {
+      const mirror = target.cloneNode(true);
+      mirror.removeAttribute("id");
+      mirror.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
+      mirror.querySelectorAll("button, input, select, textarea, a").forEach((node) => {
+        node.disabled = true;
+        node.setAttribute("tabindex", "-1");
+      });
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "visual-lab-mirror";
+      wrapper.appendChild(mirror);
+      host.appendChild(wrapper);
+    } else {
+      host.innerHTML = `<div class="visual-lab-empty">Nenhum componente disponível para espelhamento.</div>`;
+    }
+  }
+
+  renderDomTree() {
+    const root = document.getElementById("gameMain");
+    if (!root) return;
+
+    const walk = (node, depth = 0, maxDepth = 3) => {
+      if (!(node instanceof Element) || depth > maxDepth) return "";
+      const children = [...node.children].slice(0, 8);
+      const label = this.describeNode(node);
+      const marker = node.hidden ? "hidden" : node.classList.contains("active") ? "active" : "";
+      const childHtml = children.map((child) => walk(child, depth + 1, maxDepth)).join("");
+
+      return `
+        <div class="visual-lab-tree-node ${marker}" style="--depth:${depth}">
+          <span class="visual-lab-tree-icon">${depth === 0 ? "◆" : "├"}</span>
+          <strong>${escapeHtml(label)}</strong>
+          <small>${escapeHtml(node.tagName.toLowerCase())}</small>
+        </div>${childHtml}
+      `;
+    };
+
+    this.refs.visualLabDomTree.innerHTML = walk(root);
+  }
+
+  renderCssMetrics(computed, target) {
+    if (!computed || !target) {
+      this.refs.visualLabCssMetrics.innerHTML = `<div class="visual-lab-empty">Alvo CSS indisponível.</div>`;
+      return;
+    }
+
+    const rect = target.getBoundingClientRect();
+    const props = [
+      ["WIDTH", `${Math.round(rect.width)}px`],
+      ["HEIGHT", `${Math.round(rect.height)}px`],
+      ["DISPLAY", computed.display],
+      ["POSITION", computed.position],
+      ["GAP", computed.gap],
+      ["PADDING", computed.padding],
+      ["BORDER", computed.borderTopWidth],
+      ["RADIUS", computed.borderTopLeftRadius],
+      ["OPACITY", computed.opacity],
+      ["TRANSFORM", computed.transform === "none" ? "none" : computed.transform],
+      ["Z-INDEX", computed.zIndex]
+    ];
+
+    this.refs.visualLabCssMetrics.innerHTML = props.map(([label, value]) => `
+      <div class="visual-lab-css-row">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(String(value))}</strong>
+      </div>
+    `).join("");
+  }
+
+  renderJsLog() {
+    if (!this.events.length) {
+      this.refs.visualLabJsLog.innerHTML = `<div class="visual-lab-empty">Nenhum evento registrado.</div>`;
+      return;
+    }
+
+    this.refs.visualLabJsLog.innerHTML = this.events.slice(0, 16).map((item) => `
+      <div class="visual-lab-log-row ${escapeHtml(item.type.toLowerCase())}">
+        <span>${escapeHtml(item.type)}</span>
+        <div><strong>${escapeHtml(item.functionName)}</strong><p>${escapeHtml(item.detail)}</p></div>
+        <time>${item.time.toLocaleTimeString("pt-BR")}</time>
+      </div>
+    `).join("");
+  }
+
+  renderTests() {
+    const tests = [
+      this.check("HTML", () => !!document.getElementById("screenGame"), "Tela principal existe."),
+      this.check("CSS", () => !!document.querySelector('link[rel="stylesheet"][href="style.css"]') && document.styleSheets.length > 0, "Folha de estilo carregada."),
+      this.check("JS", () => !!window.game && typeof window.game.startNewGame === "function", "Controlador principal disponível."),
+      this.check("DOM", () => document.querySelectorAll("#screenTitle, #screenCinematic, #screenGame").length === 3, "As três telas nucleares estão presentes."),
+      this.check("A11Y", () => document.getElementById("menuVisualLab")?.getAttribute("aria-controls") === "visualLabOverlay" && this.root.getAttribute("role") === "dialog", "Console com associação semântica e controle de teclado."),
+      this.check("MODULES", () => !!this.game.stage2UI && !!this.game.stage10UI, "Módulos de campanha conectados ao controlador."),
+      this.check("STATE", () => !!this.game.state?.world?.actId, "Estado do mundo disponível.")
+    ];
+
+    this.refs.visualLabTests.innerHTML = tests.map((test) => `
+      <div class="visual-lab-test ${test.pass ? "pass" : "fail"}">
+        <span>${test.pass ? "✓" : "!"}</span>
+        <strong>${escapeHtml(test.label)}</strong>
+        <p>${escapeHtml(test.detail)}</p>
+      </div>
+    `).join("");
+  }
+
+  check(label, fn, detail) {
+    try {
+      return { label, pass: Boolean(fn()), detail };
+    } catch (error) {
+      return { label, pass: false, detail: `${detail} ${error.message}` };
+    }
+  }
+
+  renderFooter(target) {
+    this.refs.visualLabObserverCount.textContent = String(this.observerCount);
+    this.refs.visualLabMutationCount.textContent = String(this.mutationCount);
+    this.refs.visualLabEventCount.textContent = String(this.eventCount);
+    this.refs.visualLabFooterTarget.textContent = this.describeNode(target);
+  }
+
+  highlightTarget(target) {
+    if (!target || target === this.root) return;
+    const canvas = this.refs.visualLabCanvas;
+    const selection = this.refs.visualLabSelection;
+    if (!canvas || !selection) return;
+
+    const rect = target.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const viewportWidth = Math.max(1, window.innerWidth);
+    const viewportHeight = Math.max(1, window.innerHeight);
+    const x = (rect.left / viewportWidth) * canvasRect.width;
+    const y = (rect.top / viewportHeight) * canvasRect.height;
+    const width = (rect.width / viewportWidth) * canvasRect.width;
+    const height = (rect.height / viewportHeight) * canvasRect.height;
+
+    selection.hidden = false;
+    selection.style.transform = `translate(${Math.max(4, Math.min(x, canvasRect.width - 24))}px, ${Math.max(4, Math.min(y, canvasRect.height - 24))}px)`;
+    selection.style.width = `${Math.max(18, Math.min(width, canvasRect.width - 8))}px`;
+    selection.style.height = `${Math.max(18, Math.min(height, canvasRect.height - 8))}px`;
+  }
+}
+
 /* ==========================================================================
-   11. GAME CONTROLLER
+   12. GAME CONTROLLER
    ========================================================================== */
 
 class GameController {
@@ -1640,6 +2060,7 @@ class GameController {
     this.quests = new QuestManager(this.state);
     this.ui = new UIManager(this.state, this.audio);
     this.narrative = new NarrativeEngine(this.state, this.ui, this.quests);
+    this.visualLab = new VisualLabManager(this);
     this.input = new InputManager(this);
 
     this.lastTick = performance.now();
@@ -1649,6 +2070,7 @@ class GameController {
   initialize() {
     this.ui.init();
     this.input.bind();
+    this.visualLab.init();
     this.updateContinueButton();
     this.startGameClock();
 
@@ -1669,6 +2091,7 @@ class GameController {
   }
 
   startNewGame() {
+    this.visualLab?.record("STATE", "GameController.startNewGame()", "Inicializando nova crônica e reiniciando o estado.");
     StorageManager.clear();
 
     const settings = deepClone(this.state.settings);
@@ -1697,6 +2120,7 @@ class GameController {
   }
 
   startPrologue() {
+    this.visualLab?.record("STATE", "GameController.startPrologue()", "Entrando no núcleo jogável após o prólogo.");
     this.ui.showGameScreen();
     this.narrative.startScene("introMission");
 
@@ -1708,6 +2132,7 @@ class GameController {
   }
 
   saveGame(silent = false) {
+    this.visualLab?.record("STATE", "GameController.saveGame()", silent ? "Salvamento silencioso solicitado." : "Salvamento manual solicitado.");
     try {
       this.state.meta.playTimeSeconds = Math.floor(this.state.meta.playTimeSeconds);
       this.state.statistics.saves += 1;
@@ -1735,6 +2160,7 @@ class GameController {
   }
 
   loadGame() {
+    this.visualLab?.record("STATE", "GameController.loadGame()", "Tentativa de restauração do estado persistido.");
     const payload = StorageManager.load();
 
     if (!payload?.game) {
@@ -2498,7 +2924,7 @@ function attachStage3(game) {
     window.setTimeout(()=>{ stage3Ensure(game.state); game.stage3UI.render(); game.stage3UI.refreshFromState(); }, 180);
   };
 
-  game.state.version = STAGE3_VERSION;
+  game.state.version = APP_CONFIG.version;
   game.stage3UI.render();
 }
 
@@ -3606,7 +4032,7 @@ function attachStage4(game) {
   };
 
   // Guarda a versão do módulo sem destruir versões antigas.
-  game.state.version = STAGE4_VERSION;
+  game.state.version = APP_CONFIG.version;
 }
 
 window.addEventListener("DOMContentLoaded", () => {

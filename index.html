@@ -35,8 +35,8 @@
           <span id="worldStatus">LINHA TEMPORAL ESTÁVEL</span>
         </div>
         <div class="topbar-actions">
-          <button id="quickSaveButton" class="icon-button" type="button" title="Salvar jogo">⇩</button>
-          <button id="menuButton" class="icon-button" type="button" title="Abrir menu">☰</button>
+          <button id="quickSaveButton" class="icon-button" type="button" title="Salvar jogo" aria-label="Salvar jogo">⇩</button>
+          <button id="menuButton" class="icon-button" type="button" title="Abrir menu" aria-label="Abrir menu">☰</button>
         </div>
       </div>
     </header>
@@ -298,6 +298,10 @@
             <strong>CÓDEX</strong>
             <span>Revisar informações descobertas.</span>
           </button>
+          <button id="menuVisualLab" class="menu-card" type="button" aria-controls="visualLabOverlay">
+            <strong>LABORATÓRIO VISUAL</strong>
+            <span>Observar DOM, CSS, JavaScript, testes e mudanças em tempo real.</span>
+          </button>
           <button id="menuRestart" class="menu-card danger" type="button">
             <strong>REINICIAR CRÔNICA</strong>
             <span>Apagar o progresso local e começar de novo.</span>
@@ -386,6 +390,117 @@
           <button class="close-button" data-close-overlay="questOverlay" type="button">×</button>
         </div>
         <div id="questDetailList" class="quest-detail-list"></div>
+      </div>
+    </div>
+
+    <div id="visualLabOverlay" class="overlay visual-lab-overlay" hidden>
+      <div class="modal-panel visual-lab-modal" role="dialog" aria-modal="true" aria-labelledby="visualLabTitle">
+        <div class="visual-lab-header">
+          <div>
+            <span class="modal-kicker">ENGINEERING LAB</span>
+            <h2 id="visualLabTitle">LIVE ACTION PREVIEW</h2>
+            <p class="visual-lab-subtitle">
+              Representação contextual do sistema em execução. O laboratório observa o DOM real,
+              mede estilos computados, acompanha mutações e registra o fluxo de interação.
+            </p>
+          </div>
+          <div class="visual-lab-live">
+            <span id="visualLabLiveDot"></span>
+            <strong id="visualLabLiveText">OBSERVANDO</strong>
+          </div>
+          <button class="close-button" data-close-overlay="visualLabOverlay" type="button" aria-label="Fechar laboratório">×</button>
+        </div>
+
+        <div class="visual-lab-toolbar">
+          <div class="visual-lab-modes" role="tablist" aria-label="Camadas de inspeção">
+            <button class="visual-lab-tab active" data-lab-tab="preview" role="tab" aria-selected="true" type="button">PREVIEW</button>
+            <button class="visual-lab-tab" data-lab-tab="dom" role="tab" aria-selected="false" type="button">DOM</button>
+            <button class="visual-lab-tab" data-lab-tab="css" role="tab" aria-selected="false" type="button">CSS</button>
+            <button class="visual-lab-tab" data-lab-tab="js" role="tab" aria-selected="false" type="button">JS</button>
+            <button class="visual-lab-tab" data-lab-tab="tests" role="tab" aria-selected="false" type="button">TESTES</button>
+          </div>
+          <div class="visual-lab-toolbar-actions">
+            <button id="visualLabRefresh" class="small-button" type="button">ATUALIZAR</button>
+            <button id="visualLabClear" class="small-button" type="button">LIMPAR LOG</button>
+          </div>
+        </div>
+
+        <div class="visual-lab-grid">
+          <section class="visual-lab-stage">
+            <div class="visual-lab-stage-head">
+              <span id="visualLabAction">IDLE</span>
+              <strong id="visualLabTarget">#gameMain</strong>
+              <small id="visualLabTimestamp">aguardando evento</small>
+            </div>
+            <div id="visualLabCanvas" class="visual-lab-canvas">
+              <div class="visual-lab-canvas-scan"></div>
+              <div class="visual-lab-live-preview" id="visualLabLivePreview"></div>
+              <div class="visual-lab-overlay-grid"></div>
+              <div class="visual-lab-hud-corner hud-tl"></div>
+              <div class="visual-lab-hud-corner hud-tr"></div>
+              <div class="visual-lab-hud-corner hud-bl"></div>
+              <div class="visual-lab-hud-corner hud-br"></div>
+              <div id="visualLabSelection" class="visual-lab-selection" hidden></div>
+            </div>
+
+            <div class="visual-lab-flow">
+              <div class="visual-lab-flow-node" data-flow="event">
+                <span>01</span><strong>EVENTO</strong><small id="visualLabEvent">aguardando</small>
+              </div>
+              <div class="visual-lab-flow-line"></div>
+              <div class="visual-lab-flow-node" data-flow="function">
+                <span>02</span><strong>FUNÇÃO</strong><small id="visualLabFunction">observar DOM</small>
+              </div>
+              <div class="visual-lab-flow-line"></div>
+              <div class="visual-lab-flow-node" data-flow="state">
+                <span>03</span><strong>STATE</strong><small id="visualLabState">sincronizando</small>
+              </div>
+              <div class="visual-lab-flow-line"></div>
+              <div class="visual-lab-flow-node" data-flow="dom">
+                <span>04</span><strong>DOM UPDATE</strong><small id="visualLabDomUpdate">monitorando</small>
+              </div>
+              <div class="visual-lab-flow-line"></div>
+              <div class="visual-lab-flow-node" data-flow="result">
+                <span>05</span><strong>RESULTADO</strong><small id="visualLabResult">pronto</small>
+              </div>
+            </div>
+          </section>
+
+          <aside class="visual-lab-inspector">
+            <section class="visual-lab-panel-section active" data-lab-panel="preview">
+              <div class="visual-lab-section-title">CONTEXTO DO SISTEMA</div>
+              <div id="visualLabContext" class="visual-lab-context"></div>
+            </section>
+
+            <section class="visual-lab-panel-section" data-lab-panel="dom">
+              <div class="visual-lab-section-title">ÁRVORE DOM</div>
+              <div id="visualLabDomTree" class="visual-lab-tree"></div>
+            </section>
+
+            <section class="visual-lab-panel-section" data-lab-panel="css">
+              <div class="visual-lab-section-title">CSS COMPUTADO</div>
+              <div id="visualLabCssMetrics" class="visual-lab-metrics"></div>
+            </section>
+
+            <section class="visual-lab-panel-section" data-lab-panel="js">
+              <div class="visual-lab-section-title">FLUXO JAVASCRIPT</div>
+              <div id="visualLabJsLog" class="visual-lab-log"></div>
+            </section>
+
+            <section class="visual-lab-panel-section" data-lab-panel="tests">
+              <div class="visual-lab-section-title">AUTO-TESTE</div>
+              <div id="visualLabTests" class="visual-lab-tests"></div>
+            </section>
+          </aside>
+        </div>
+
+        <div class="visual-lab-footer">
+          <div><span>OBSERVADORES</span><strong id="visualLabObserverCount">0</strong></div>
+          <div><span>MUTAÇÕES</span><strong id="visualLabMutationCount">0</strong></div>
+          <div><span>EVENTOS</span><strong id="visualLabEventCount">0</strong></div>
+          <div><span>ÚLTIMO ALVO</span><strong id="visualLabFooterTarget">#gameMain</strong></div>
+          <div class="visual-lab-shortcut"><span>ATALHO</span><strong>Ctrl + Shift + L</strong></div>
+        </div>
       </div>
     </div>
 
