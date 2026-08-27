@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#080b12">
   <meta name="description" content="JESUS CHRONICLES — aventura narrativa sobre viagem temporal, escolhas e o futuro da humanidade.">
   <title>JESUS CHRONICLES</title>
-  <link rel="stylesheet" href="style.css">
+  <link id="gameStylesheet" rel="stylesheet" href="style.css" onerror="this.onerror=null;this.href='style(7).css';">
 </head>
 
 <body>
@@ -509,6 +509,18 @@
     <div id="fadeTransition" class="fade-transition"></div>
   </div>
 
-  <script src="app.js" defer></script>
+  <script id="gameScript" src="app.js" defer onerror="this.onerror=null;const fallback=document.createElement('script');fallback.src='app(8).js';fallback.defer=true;document.head.appendChild(fallback);"></script>
+  <script>
+    // Watchdog de carregamento: evita tela vazia quando um asset é renomeado ou
+    // uma hospedagem antiga ainda referencia a versão anterior do projeto.
+    window.setTimeout(() => {
+      if (!window.game) {
+        const boot = document.createElement('div');
+        boot.style.cssText = 'position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:24px;background:#05070c;color:#eef4ff;font-family:system-ui,sans-serif;text-align:center;';
+        boot.innerHTML = '<div style="max-width:620px;border:1px solid rgba(170,194,224,.25);padding:28px;background:rgba(8,13,22,.96)"><div style="font-size:12px;letter-spacing:.18em;color:#8bc8ff">JESUS CHRONICLES / RECOVERY</div><h2 style="margin:10px 0">O núcleo não iniciou</h2><p style="color:#aebbd0;line-height:1.7">O carregador tentou restaurar o núcleo automaticamente. Atualize a página; se o problema persistir, mantenha juntos <strong>index.html</strong>, <strong>app.js</strong> e <strong>style.css</strong>.</p><button onclick="location.reload()" style="margin-top:14px;padding:11px 16px;cursor:pointer">TENTAR NOVAMENTE</button></div>';
+        document.body.appendChild(boot);
+      }
+    }, 4500);
+  </script>
 </body>
 </html>

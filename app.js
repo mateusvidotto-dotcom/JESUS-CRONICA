@@ -556,12 +556,23 @@ class StorageManager {
       })
     };
 
-    localStorage.setItem(APP_CONFIG.saveKey, JSON.stringify(payload));
+    try {
+      localStorage.setItem(APP_CONFIG.saveKey, JSON.stringify(payload));
+    } catch (error) {
+      console.warn("JESUS CHRONICLES: não foi possível escrever o save local.", error);
+      throw error;
+    }
     return payload;
   }
 
   static load() {
-    const raw = localStorage.getItem(APP_CONFIG.saveKey);
+    let raw = null;
+    try {
+      raw = localStorage.getItem(APP_CONFIG.saveKey);
+    } catch (error) {
+      console.warn("JESUS CHRONICLES: leitura do save local indisponível.", error);
+      return null;
+    }
     if (!raw) return null;
 
     const payload = safeParse(raw);
@@ -573,15 +584,28 @@ class StorageManager {
   }
 
   static clear() {
-    localStorage.removeItem(APP_CONFIG.saveKey);
+    try {
+      localStorage.removeItem(APP_CONFIG.saveKey);
+    } catch (error) {
+      console.warn("JESUS CHRONICLES: não foi possível limpar o save local.", error);
+    }
   }
 
   static hasSave() {
-    return Boolean(localStorage.getItem(APP_CONFIG.saveKey));
+    try {
+      return Boolean(localStorage.getItem(APP_CONFIG.saveKey));
+    } catch (error) {
+      console.warn("JESUS CHRONICLES: não foi possível consultar o save local.", error);
+      return false;
+    }
   }
 
   static saveSettings(settings) {
-    localStorage.setItem(APP_CONFIG.settingsKey, JSON.stringify(settings));
+    try {
+      localStorage.setItem(APP_CONFIG.settingsKey, JSON.stringify(settings));
+    } catch (error) {
+      console.warn("JESUS CHRONICLES: configurações não puderam ser persistidas.", error);
+    }
   }
 
   static loadSettings() {
@@ -598,7 +622,17 @@ class StorageManager {
 }
 
 function loadSettings() {
-  return StorageManager.loadSettings();
+  try {
+    return StorageManager.loadSettings();
+  } catch (error) {
+    console.warn("JESUS CHRONICLES: armazenamento de configurações indisponível; usando padrões seguros.", error);
+    return {
+      fastText: false,
+      highContrast: false,
+      reducedMotion: false,
+      audio: true
+    };
+  }
 }
 
 /* ==========================================================================
@@ -1748,6 +1782,11 @@ class VisualLabManager {
     if (!appRoot) return;
 
     const observer = new MutationObserver((mutations) => {
+      // O laboratório não precisa processar cada caractere digitado enquanto
+      // está fechado. Isso evita trabalho contínuo sem alterar a observabilidade
+      // quando o laboratório está visível.
+      if (this.root?.hidden) return;
+
       this.mutationCount += mutations.length;
       const significant = mutations.some((mutation) =>
         mutation.type === "childList" ||
@@ -1793,6 +1832,7 @@ class VisualLabManager {
   }
 
   scheduleRefresh(reason) {
+    if (this.root?.hidden) return;
     if (this.renderScheduled) return;
     this.renderScheduled = true;
     window.requestAnimationFrame(() => {
@@ -2312,8 +2352,16 @@ function escapeHtml(value) {
    ========================================================================== */
 
 window.addEventListener("DOMContentLoaded", () => {
-  window.game = new GameController();
-  window.game.initialize();
+  try {
+    if (!window.game) window.game = new GameController();
+    if (!window.game.__jcCoreInitialized) {
+      window.game.initialize();
+      window.game.__jcCoreInitialized = true;
+    }
+  } catch (error) {
+    console.error("JESUS CHRONICLES: falha no núcleo de inicialização.", error);
+    window.__JC_BOOT_ERROR__ = error;
+  }
 });
 
 
@@ -11381,3 +11429,129 @@ window.addEventListener("DOMContentLoaded", () => {
     console.error("Stage 10: GameController ausente.");
   }
 });
+
+
+/* ============================================================================
+   JESUS CHRONICLES — STABILITY / RECOVERY LAYER
+   -----------------------------------------------------------------------------
+   Camada aditiva: não remove nem substitui conteúdo narrativo.
+   Objetivos:
+   - recuperar inicializações interrompidas sem recarregar a página;
+   - evitar duplicação acidental de listeners/timers da camada de recuperação;
+   - impedir que um módulo opcional derrube os demais;
+   - validar a ponte entre os três arquivos da aplicação;
+   - registrar falhas de runtime no Laboratório Visual quando disponível.
+   ============================================================================ */
+(() => {
+  const modules = [
+    [2, "attachStage2"], [3, "attachStage3"], [4, "attachStage4"],
+    [5, "attachStage5"], [6, "attachStage6"], [7, "attachStage7"],
+    [8, "attachStage8"], [9, "attachStage9"], [10, "attachStage10"]
+  ];
+
+  const safeRecord = (type, fn, detail) => {
+    try { window.game?.visualLab?.record(type, fn, detail); } catch {}
+  };
+
+  const report = (title, message) => {
+    try {
+      window.game?.ui?.notify?.(title, message, "error");
+    } catch {}
+  };
+
+  const installAttachGuards = () => {
+    for (const [number, fnName] of modules) {
+      const attach = window[fnName];
+      if (typeof attach !== "function" || attach.__jcGuarded) continue;
+
+      const guarded = function (game) {
+        const result = attach(game);
+        if (game) game[`__jcStage${number}Attached`] = true;
+        return result;
+      };
+
+      guarded.__jcGuarded = true;
+      guarded.__jcOriginal = attach;
+      window[fnName] = guarded;
+    }
+  };
+
+  const attachMissingModules = () => {
+    const game = window.game;
+    if (!game) return false;
+
+    for (const [number, fnName] of modules) {
+      try {
+        const attach = window[fnName];
+        if (typeof attach !== "function") continue;
+        const marker = `__jcStage${number}Attached`;
+        if (game[marker]) continue;
+
+        // Os módulos originais continuam responsáveis por suas próprias UIs.
+        // Este ponto apenas recupera uma inicialização que tenha falhado.
+        attach(game);
+        game[marker] = true;
+        safeRecord("SYSTEM", `attachStage${number}()`, `Módulo ${number} recuperado.`);
+      } catch (error) {
+        console.error(`JESUS CHRONICLES: módulo ${number} não pôde ser anexado.`, error);
+        safeRecord("ERROR", `attachStage${number}()`, error?.message || String(error));
+      }
+    }
+
+    return true;
+  };
+
+  const recover = () => {
+    try {
+      if (!window.game) {
+        window.game = new GameController();
+      }
+      if (!window.game.__jcCoreInitialized) {
+        window.game.initialize();
+        window.game.__jcCoreInitialized = true;
+      }
+      attachMissingModules();
+
+      if (window.game?.ui) {
+        window.game.ui.renderTitleState?.();
+        window.game.ui.renderPlayerStats?.();
+        window.game.ui.renderAbilities?.();
+        window.game.ui.renderMissions?.();
+        window.game.ui.renderWorldStatus?.();
+      }
+
+      safeRecord("SYSTEM", "StabilityRecovery", "Inicialização validada e módulos recuperados quando necessário.");
+      window.__JC_READY__ = true;
+    } catch (error) {
+      console.error("JESUS CHRONICLES: recuperação final falhou.", error);
+      report("SISTEMA", "A interface encontrou um erro de inicialização. Abra o Laboratório Visual para ver o diagnóstico.");
+    }
+  };
+
+  window.addEventListener("error", (event) => {
+    const error = event?.error || new Error(event?.message || "Erro de runtime");
+    console.error("JESUS CHRONICLES runtime error:", error);
+    safeRecord("ERROR", "window.error", error.message || String(error));
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event?.reason instanceof Error ? event.reason : new Error(String(event?.reason));
+    console.error("JESUS CHRONICLES unhandled rejection:", reason);
+    safeRecord("ERROR", "unhandledrejection", reason.message || String(reason));
+  });
+
+  // Instala os guardas antes do DOMContentLoaded para que os listeners originais
+  // dos atos sejam marcados quando executarem pela primeira vez.
+  installAttachGuards();
+
+  window.addEventListener("DOMContentLoaded", () => {
+    // Executa depois dos listeners originais dos atos, permitindo que a camada
+    // de recuperação detecte qualquer inicialização parcial.
+    window.setTimeout(recover, 0);
+    window.setTimeout(recover, 250);
+  }, { once: true });
+
+  window.addEventListener("load", () => {
+    window.setTimeout(recover, 50);
+  }, { once: true });
+})();
