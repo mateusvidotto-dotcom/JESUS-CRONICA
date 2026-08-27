@@ -3770,32 +3770,17 @@ class Stage4UI {
   }
 
   bind() {
-    // Os controles do Ato IV ficam isolados no próprio overlay.
-    // Isso evita que outro sistema global consuma/intercepte o clique.
-    const choiceContainer = this.overlay.querySelector("#stage4ChoiceContainer");
+    document.addEventListener("click", (event) => {
+      if (event.target.closest("[data-stage4-close]")) {
+        this.close();
+        return;
+      }
 
-    choiceContainer.addEventListener("click", (event) => {
-      const button = event.target.closest("[data-stage4-choice]");
-      if (!button || !choiceContainer.contains(button) || button.disabled) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      const choiceId = button.dataset.stage4Choice;
-      if (!choiceId || !this.game.encounter) return;
-
-      choiceContainer.querySelectorAll("[data-stage4-choice]").forEach((item) => {
-        item.disabled = true;
-        item.setAttribute("aria-disabled", "true");
-      });
-
-      button.classList.add("is-selected");
-      this.game.visualLab?.record(
-        "CHOICE",
-        "EncounterNarrativeManager.choose()",
-        `Escolha do Ato IV: ${choiceId}`
-      );
-      this.game.encounter.choose(choiceId);
+      const choice = event.target.closest("[data-stage4-choice]");
+      if (choice) {
+        this.game.encounter.choose(choice.dataset.stage4Choice);
+        return;
+      }
     });
 
     this.overlay.addEventListener("click", (event) => {
@@ -3804,44 +3789,23 @@ class Stage4UI {
       }
     });
 
-    document.getElementById("stage4Continue").addEventListener("click", (event) => {
-      event.preventDefault();
+    this.game.ui.refs.dialogueContinueButton.addEventListener("click", () => {
+      // Não interfere no sistema principal; o encontro possui seus próprios controles.
+    });
+
+    document.getElementById("stage4Continue").addEventListener("click", () => {
       this.game.encounter.continue();
     });
 
-    document.getElementById("stage4Skip").addEventListener("click", (event) => {
-      event.preventDefault();
+    document.getElementById("stage4Skip").addEventListener("click", () => {
       const skipped = this.game.encounter.skipTyping();
       if (!skipped) this.game.encounter.continue();
     });
 
-    document.getElementById("stage4ResultContinue").addEventListener("click", (event) => {
-      event.preventDefault();
+    document.getElementById("stage4ResultContinue").addEventListener("click", () => {
       this.hideResult();
-      this.game.visualLab?.record(
-        "CHOICE_RESULT",
-        "Stage4UI.continueResult()",
-        "Consequência aceita; avançando para o próximo diálogo."
-      );
       this.game.encounter.renderCurrent();
     });
-
-    // Atalhos 1–9 para escolhas narrativas, úteis quando o botão físico estiver
-    // sendo coberto por outra camada visual ou quando o usuário estiver usando teclado.
-    this._keyHandler = (event) => {
-      if (this.overlay.hidden || !this.game.state.stage4.active) return;
-      const key = Number(event.key);
-      if (!Number.isInteger(key) || key < 1 || key > 9) return;
-
-      const choices = [...choiceContainer.querySelectorAll("[data-stage4-choice]")];
-      const button = choices[key - 1];
-      if (!button || button.disabled) return;
-
-      event.preventDefault();
-      button.click();
-    };
-
-    document.addEventListener("keydown", this._keyHandler);
   }
 
   open() {
@@ -3888,19 +3852,15 @@ class Stage4UI {
   renderChoices(choices) {
     const container = document.getElementById("stage4ChoiceContainer");
     container.innerHTML = "";
-    container.removeAttribute("aria-hidden");
 
-    for (const [index, choice] of choices.entries()) {
+    for (const choice of choices) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "stage4-choice";
       button.dataset.stage4Choice = choice.id;
-      button.setAttribute("aria-label", `Escolha ${index + 1}: ${choice.label}`);
-      button.setAttribute("data-choice-index", String(index + 1));
-      button.tabIndex = 0;
 
       button.innerHTML = `
-        <span class="stage4-choice-index">${index + 1}</span>
+        <span class="stage4-choice-index">${container.children.length + 1}</span>
         <span>
           <strong>${escapeStage4(choice.label)}</strong>
           <small>${escapeStage4(choice.text)}</small>
@@ -3922,7 +3882,6 @@ class Stage4UI {
     result.hidden = false;
     this.choiceResult = callback;
     this.setChoiceMode(true);
-    document.getElementById("stage4ResultContinue")?.focus();
   }
 
   hideResult() {
@@ -3974,53 +3933,85 @@ class Stage4UI {
   }
 
   initStage3Button() {
-    const interval = window.setInterval(() => {
+    // O botão é um elemento dinâmico do Ato III. Não confiamos em referências
+    // antigas nem em wrappers de renderização: a ação é delegada ao documento
+    // e o estado é validado no momento exato do clique.
+    if (this.stage3ButtonObserver) return;
+
+    const ensureButton = () => {
       const modal = document.querySelector("#stage3ExplorationOverlay .stage3-body");
       if (!modal) return;
 
-      if (document.querySelector("[data-stage4-open]")) {
-        clearInterval(interval);
+      let wrapper = modal.querySelector("[data-stage4-launch]");
+      if (!wrapper) {
+        wrapper = document.createElement("div");
+        wrapper.className = "stage4-launch-panel";
+        wrapper.dataset.stage4Launch = "1";
+        wrapper.innerHTML = `
+          <div>
+            <span class="eyebrow">PRÓXIMO MÓDULO</span>
+            <strong>Encontrar o mestre</strong>
+            <small data-stage4-launch-hint>Confirme a rota para liberar a aproximação.</small>
+          </div>
+          <button type="button" data-stage4-open aria-describedby="stage4LaunchHint">
+            APROXIMAR-SE
+          </button>
+        `;
+        modal.appendChild(wrapper);
+      }
+
+      const button = wrapper.querySelector("[data-stage4-open]");
+      const hint = wrapper.querySelector("[data-stage4-launch-hint]");
+      if (!button) return;
+
+      const unlocked = Boolean(this.game.state.stage3?.flags?.routeDiscovered);
+      button.disabled = false;
+      button.dataset.locked = unlocked ? "false" : "true";
+      button.setAttribute("aria-disabled", unlocked ? "false" : "true");
+      button.title = unlocked
+        ? "Iniciar o Ato IV — O Encontro"
+        : "A aproximação exige uma rota confirmada. Clique para ver o requisito.";
+      wrapper.classList.toggle("locked", !unlocked);
+      if (hint) {
+        hint.id = "stage4LaunchHint";
+        hint.textContent = unlocked
+          ? "A rota foi confirmada. O encontro com o mestre pode começar."
+          : "Converse com fontes independentes até confirmar uma rota confiável.";
+      }
+    };
+
+    this.stage3ButtonEnsure = ensureButton;
+    ensureButton();
+
+    this.stage3ButtonObserver = new MutationObserver(() => ensureButton());
+    this.stage3ButtonObserver.observe(document.body, { childList: true, subtree: true });
+
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-stage4-open]");
+      if (!button) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const unlocked = Boolean(this.game.state.stage3?.flags?.routeDiscovered);
+      if (!unlocked) {
+        this.game.ui.notify(
+          "ROTA AINDA NÃO CONFIRMADA",
+          "Colete informações de fontes independentes para liberar o encontro.",
+          "info"
+        );
+        ensureButton();
         return;
       }
 
-      const wrapper = document.createElement("div");
-      wrapper.className = "stage4-launch-panel";
-      wrapper.innerHTML = `
-        <div>
-          <span class="eyebrow">PRÓXIMO MÓDULO</span>
-          <strong>Encontrar o mestre</strong>
-          <small>Quando a rota estiver confirmada, aproxime-se do encontro narrativo.</small>
-        </div>
-        <button type="button" data-stage4-open>APROXIMAR-SE</button>
-      `;
+      if (!this.game.encounter) {
+        console.error("Stage 4: Encounter manager indisponível.");
+        this.game.ui.notify("MÓDULO INDISPONÍVEL", "O encontro não pôde ser inicializado.", "error");
+        return;
+      }
 
-      modal.appendChild(wrapper);
-
-      const stage4Button = wrapper.querySelector("[data-stage4-open]");
-
-      const update = () => {
-        const unlocked = Boolean(
-          this.game.state.stage3?.flags?.routeDiscovered
-        );
-
-        stage4Button.disabled = !unlocked;
-        stage4Button.title = unlocked
-          ? "Iniciar o Ato IV — O Encontro"
-          : "Colete fontes suficientes para confirmar a rota.";
-
-        wrapper.classList.toggle("locked", !unlocked);
-      };
-
-      update();
-
-      const oldRender = this.game.stage3UI.render.bind(this.game.stage3UI);
-      this.game.stage3UI.render = (...args) => {
-        oldRender(...args);
-        update();
-      };
-
-      clearInterval(interval);
-    }, 250);
+      this.game.encounter.start();
+    });
   }
 
   refresh() {
