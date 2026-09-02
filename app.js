@@ -1,43 +1,48 @@
 /* ==========================================================================
    JESUS CHRONICLES
-   CORE ENGINE — VERSÃO CORRIGIDA E ESTÁVEL
+   CORE ENGINE
+   ==========================================================================
+   Versão: 1.1.0
 
-   HTML5 + CSS3 + JavaScript moderno
    Arquitetura:
-   - State Manager
-   - Event Bus
-   - Narrative Engine
-   - UI Manager
-   - Save Manager
-   - Mission Manager
-   - Codex Manager
-   - Audio Manager
-   - Visual Lab
-   - Game Controller
+   - EventBus
+   - GameLogger
+   - StateManager
+   - AudioManager
+   - SaveManager
+   - MissionManager
+   - CodexManager
+   - UIManager
+   - NarrativeEngine
+   - SettingsManager
+   - ParticleSystem
+   - VisualLab
+   - GameController
 
-   FOCO DESTA VERSÃO:
-   - corrigir definitivamente o sistema de escolhas;
-   - preservar a história existente;
-   - impedir escolhas "mortas";
-   - impedir duplo clique;
-   - impedir escolha de cena antiga;
-   - preservar efeitos;
-   - preservar flags;
-   - preservar missões;
-   - preservar códex;
-   - preservar autosave;
-   - preservar teclado;
-   - preservar laboratório visual;
-   - evitar renderização excessiva;
-   - evitar conflitos entre listeners;
+   Objetivos:
+   - Inicialização segura
+   - Sistema narrativo robusto
+   - Escolhas realmente funcionais
+   - Consequências persistentes
+   - Salvamento local
+   - Autosave
+   - Missões
+   - Códex
+   - HUD
+   - Teclado
+   - Laboratório visual
+   - Diagnóstico
+   - Proteção contra duplo clique
+   - Proteção contra cenas inconsistentes
+   - Preservação das estruturas existentes
    ========================================================================== */
 
 (() => {
   'use strict';
 
-  /* =========================================================================
-     CONFIGURAÇÃO
-     ========================================================================= */
+  /* ==========================================================================
+     CONFIGURAÇÃO GLOBAL
+     ========================================================================== */
 
   const VERSION = '1.1.0';
 
@@ -53,25 +58,25 @@
   const PLAY_CLOCK_INTERVAL =
     1000;
 
-  const MAX_STAT =
-    100;
-
   const MIN_STAT =
     0;
 
-  /* =========================================================================
+  const MAX_STAT =
+    100;
+
+  /* ==========================================================================
      UTILITÁRIOS
-     ========================================================================= */
+     ========================================================================== */
 
   const clamp = (
     value,
     min = MIN_STAT,
     max = MAX_STAT
   ) => {
-    const number =
+    const numeric =
       Number(value);
 
-    if (!Number.isFinite(number)) {
+    if (!Number.isFinite(numeric)) {
       return min;
     }
 
@@ -79,7 +84,7 @@
       max,
       Math.max(
         min,
-        number
+        numeric
       )
     );
   };
@@ -107,6 +112,13 @@
   const nowISO = () =>
     new Date().toISOString();
 
+  const byId = (
+    id
+  ) =>
+    document.getElementById(
+      id
+    );
+
   const qs = (
     selector,
     root = document
@@ -125,37 +137,6 @@
       )
     ];
 
-  const byId = (
-    id
-  ) =>
-    document.getElementById(
-      id
-    );
-
-  const formatDate = (
-    iso
-  ) => {
-    if (!iso) {
-      return 'Nenhum registro';
-    }
-
-    try {
-      return new Intl.DateTimeFormat(
-        'pt-BR',
-        {
-          dateStyle: 'short',
-          timeStyle: 'short'
-        }
-      ).format(
-        new Date(
-          iso
-        )
-      );
-    } catch {
-      return 'Registro existente';
-    }
-  };
-
   const isObject = (
     value
   ) =>
@@ -168,9 +149,7 @@
   const escapeHTML = (
     value
   ) =>
-    safeText(
-      value
-    )
+    safeText(value)
       .replace(
         /&/g,
         '&amp;'
@@ -192,9 +171,36 @@
         '&#039;'
       );
 
-  /* =========================================================================
+  const formatDate = (
+    iso
+  ) => {
+    if (!iso) {
+      return 'Nenhum registro';
+    }
+
+    try {
+      return new Intl.DateTimeFormat(
+        'pt-BR',
+        {
+          dateStyle:
+            'short',
+
+          timeStyle:
+            'short'
+        }
+      ).format(
+        new Date(
+          iso
+        )
+      );
+    } catch {
+      return 'Registro existente';
+    }
+  };
+
+  /* ==========================================================================
      EVENT BUS
-     ========================================================================= */
+     ========================================================================== */
 
   class EventBus {
     constructor(
@@ -286,9 +292,9 @@
     }
   }
 
-  /* =========================================================================
+  /* ==========================================================================
      LOGGER
-     ========================================================================= */
+     ========================================================================== */
 
   class GameLogger {
     constructor() {
@@ -307,11 +313,20 @@
         0;
 
       this.lastFlow = {
-        event: '—',
-        function: '—',
-        state: '—',
-        dom: '—',
-        result: '—'
+        event:
+          '—',
+
+        function:
+          '—',
+
+        state:
+          '—',
+
+        dom:
+          '—',
+
+        result:
+          '—'
       };
     }
 
@@ -320,26 +335,25 @@
       message,
       detail = ''
     ) {
-      const entry = {
+      this.entries.push({
         time:
           new Date()
             .toLocaleTimeString(
               'pt-BR'
             ),
+
         level,
+
         message:
           safeText(
             message
           ),
+
         detail:
           safeText(
             detail
           )
-      };
-
-      this.entries.push(
-        entry
-      );
+      });
 
       if (
         this.entries.length >
@@ -448,23 +462,23 @@
         'render';
     }
 
+    latest(
+      count = 10
+    ) {
+      return this.entries.slice(
+        -count
+      );
+    }
+
     clear() {
       this.entries =
         [];
     }
-
-    latest(
-      amount = 12
-    ) {
-      return this.entries.slice(
-        -amount
-      );
-    }
   }
 
-  /* =========================================================================
+  /* ==========================================================================
      ESTADO PADRÃO
-     ========================================================================= */
+     ========================================================================== */
 
   const DEFAULT_STATE = {
     version:
@@ -765,9 +779,9 @@
     }
   };
 
-  /* =========================================================================
+  /* ==========================================================================
      STATE MANAGER
-     ========================================================================= */
+     ========================================================================== */
 
   class StateManager {
     constructor(
@@ -822,12 +836,10 @@
       const settings =
         preserveSettings
           ? deepClone(
-              this.state
-                .settings
+              this.state.settings
             )
           : deepClone(
-              DEFAULT_STATE
-                .settings
+              DEFAULT_STATE.settings
             );
 
       this.state =
@@ -945,17 +957,21 @@
       );
 
       if (
-        this.silentDepth === 0
+        this.silentDepth ===
+        0
       ) {
         this.emitChange(
           'state:changed',
           {
             path,
+
             before,
+
             value:
               deepClone(
                 value
               ),
+
             source
           }
         );
@@ -975,9 +991,12 @@
       this.set(
         path,
         {
-          ...(isObject(base)
+          ...(isObject(
+            base
+          )
             ? base
             : {}),
+
           ...partial
         },
         source
@@ -1009,6 +1028,22 @@
       amount,
       source = 'narrative'
     ) {
+      const allowed =
+        new Set([
+          'hope',
+          'freedom',
+          'control',
+          'temporal'
+        ]);
+
+      if (
+        !allowed.has(
+          key
+        )
+      ) {
+        return;
+      }
+
       const path =
         `player.stats.${key}`;
 
@@ -1021,12 +1056,14 @@
 
       this.set(
         path,
+
         clamp(
           current +
             Number(
               amount
             )
         ),
+
         source
       );
     }
@@ -1035,17 +1072,14 @@
       callback,
       source = 'batch'
     ) {
-      const previous =
-        this.silentDepth;
-
       this.silentDepth +=
         1;
 
       try {
         callback();
       } finally {
-        this.silentDepth =
-          previous;
+        this.silentDepth -=
+          1;
       }
 
       this.state.meta.updatedAt =
@@ -1083,7 +1117,7 @@
     sanitize(
       input
     ) {
-      const merged =
+      const output =
         deepClone(
           DEFAULT_STATE
         );
@@ -1105,8 +1139,7 @@
             const [
               key,
               value
-            ]
-            of Object.entries(
+            ] of Object.entries(
               source
             )
           ) {
@@ -1119,6 +1152,7 @@
                 deepClone(
                   value
                 );
+
               continue;
             }
 
@@ -1136,6 +1170,7 @@
                       'object'
                     ? target[key]
                     : {},
+
                   value
                 );
 
@@ -1149,11 +1184,10 @@
           return target;
         };
 
-      const output =
-        merge(
-          merged,
-          input
-        );
+      merge(
+        output,
+        input
+      );
 
       for (
         const key of [
@@ -1180,9 +1214,9 @@
     }
   }
 
-  /* =========================================================================
+  /* ==========================================================================
      AUDIO
-     ========================================================================= */
+     ========================================================================== */
 
   class AudioManager {
     constructor(
@@ -1259,7 +1293,7 @@
       frequency = 440,
       duration = 0.06,
       type = 'sine',
-      volume = 0.24,
+      volume = 0.2,
       delay = 0
     ) {
       if (
@@ -1378,9 +1412,9 @@
     }
   }
 
-  /* =========================================================================
+  /* ==========================================================================
      SAVE MANAGER
-     ========================================================================= */
+     ========================================================================== */
 
   class SaveManager {
     constructor(
@@ -1424,11 +1458,13 @@
             SAVE_KEY
           );
 
-        return raw
-          ? JSON.parse(
-              raw
-            )
-          : null;
+        if (!raw) {
+          return null;
+        }
+
+        return JSON.parse(
+          raw
+        );
       } catch (
         error
       ) {
@@ -1484,12 +1520,24 @@
       autosave = false
     } = {}) {
       try {
+        const timestamp =
+          nowISO();
+
+        if (
+          autosave
+        ) {
+          this.state.set(
+            'meta.lastAutosave',
+            timestamp,
+            'autosave'
+          );
+        }
+
         const payload = {
           version:
             VERSION,
 
-          timestamp:
-            nowISO(),
+          timestamp,
 
           checksum:
             'JC-V1',
@@ -1513,14 +1561,6 @@
             : 'save'
         );
 
-        if (autosave) {
-          this.state.set(
-            'meta.lastAutosave',
-            payload.timestamp,
-            'autosave'
-          );
-        }
-
         this.bus.emit(
           'save:completed',
           payload
@@ -1531,9 +1571,11 @@
         ) {
           this.notify(
             'Crônica salva',
+
             autosave
               ? 'Salvamento automático concluído.'
               : 'Seu progresso foi armazenado neste navegador.',
+
             'success'
           );
         }
@@ -1552,7 +1594,9 @@
         ) {
           this.notify(
             'Falha ao salvar',
+
             'O navegador bloqueou o armazenamento local.',
+
             'error'
           );
         }
@@ -1568,15 +1612,14 @@
 
       this.timer =
         setTimeout(
-          () => {
+          () =>
             this.save({
               silent:
                 true,
 
               autosave:
                 true
-            });
-          },
+            }),
           AUTOSAVE_DELAY
         );
     }
@@ -1585,12 +1628,9 @@
       silent = false
     } = {}) {
       try {
-        const raw =
-          this.readRaw();
-
         const payload =
           this.migrate(
-            raw
+            this.readRaw()
           );
 
         if (
@@ -1616,9 +1656,11 @@
         ) {
           this.notify(
             'Crônica restaurada',
+
             `Save de ${formatDate(
               payload.timestamp
             )}.`,
+
             'success'
           );
         }
@@ -1637,7 +1679,9 @@
         ) {
           this.notify(
             'Não foi possível carregar',
-            'O save está ausente ou inválido.',
+
+            'O save está ausente ou inválido. Uma nova crônica continua disponível.',
+
             'error'
           );
         }
@@ -1658,7 +1702,9 @@
 
         this.notify(
           'Save apagado',
+
           'A crônica local foi removida.',
+
           'warning'
         );
 
@@ -1676,9 +1722,9 @@
     }
   }
 
-  /* =========================================================================
+  /* ==========================================================================
      LOCAIS
-     ========================================================================= */
+     ========================================================================== */
 
   const LOCATIONS = {
     mega_city: {
@@ -1766,7 +1812,7 @@
         'Galileia',
 
       act:
-        'ATO II',
+        'ATO III',
 
       era:
         'SÉCULO I',
@@ -1782,9 +1828,9 @@
     }
   };
 
-  /* =========================================================================
+  /* ==========================================================================
      CINEMÁTICAS
-     ========================================================================= */
+     ========================================================================== */
 
   const CINEMATICS = [
     {
@@ -1836,9 +1882,9 @@
     }
   ];
 
-  /* =========================================================================
-     CENAS
-     ========================================================================= */
+  /* ==========================================================================
+     ROTEIRO
+     ========================================================================== */
 
   const SCENES = {
 
@@ -2313,13 +2359,13 @@
         'A busca começou. Mas a primeira mudança importante talvez já tenha acontecido: você entrou na história acreditando que veio encontrar uma resposta — e encontrou uma pergunta.',
 
       next:
-        'g_open_end'
+        null
     }
   };
 
-  /* =========================================================================
-     MISSÕES
-     ========================================================================= */
+  /* ==========================================================================
+     MISSION MANAGER
+     ========================================================================== */
 
   class MissionManager {
     constructor(
@@ -2367,6 +2413,7 @@
           status:
             'active'
         },
+
         'mission.unlock'
       );
 
@@ -2380,6 +2427,7 @@
         'mission:updated',
         {
           id,
+
           type:
             'unlock'
         }
@@ -2406,13 +2454,18 @@
       const next =
         Math.min(
           mission.goal,
-          mission.progress +
-            amount
+          Number(
+            mission.progress
+          ) +
+            Number(
+              amount
+            )
         );
 
       this.state.set(
         `missions.${id}.progress`,
         next,
+
         'mission.progress'
       );
 
@@ -2420,8 +2473,10 @@
         'mission:updated',
         {
           id,
+
           type:
             'progress',
+
           progress:
             next
         }
@@ -2462,6 +2517,7 @@
           progress:
             mission.goal
         },
+
         'mission.complete'
       );
 
@@ -2475,6 +2531,7 @@
         'mission:updated',
         {
           id,
+
           type:
             'complete'
         }
@@ -2494,9 +2551,9 @@
     }
   }
 
-  /* =========================================================================
-     CÓDEX
-     ========================================================================= */
+  /* ==========================================================================
+     CODEX MANAGER
+     ========================================================================== */
 
   class CodexManager {
     constructor(
@@ -2539,6 +2596,7 @@
           unlocked:
             true
         },
+
         'codex.unlock'
       );
 
@@ -2568,9 +2626,9 @@
     }
   }
 
-  /* =========================================================================
+  /* ==========================================================================
      UI MANAGER
-     ========================================================================= */
+     ========================================================================== */
 
   class UIManager {
     constructor(
@@ -2591,17 +2649,17 @@
       this.audio =
         audio;
 
-      this.initialized =
-        false;
-
       this.game =
         null;
 
-      this.bindingKeys =
-        new WeakMap();
+      this.initialized =
+        false;
 
       this.overlayStack =
         [];
+
+      this.bindingRegistry =
+        new WeakMap();
 
       this.notificationTimers =
         new Set();
@@ -2621,37 +2679,39 @@
       callback,
       options
     ) {
-      if (!element) {
+      if (
+        !element
+      ) {
         this.logger.warn(
-          `Elemento ausente para evento ${event}`
+          `Elemento ausente: ${event}`
         );
 
         return false;
       }
 
-      let set =
-        this.bindingKeys.get(
+      let registry =
+        this.bindingRegistry.get(
           element
         );
 
-      if (!set) {
-        set =
+      if (!registry) {
+        registry =
           new Set();
 
-        this.bindingKeys.set(
+        this.bindingRegistry.set(
           element,
-          set
+          registry
         );
       }
 
-      const key =
+      const signature =
         `${event}:${String(
           callback
         )}`;
 
       if (
-        set.has(
-          key
+        registry.has(
+          signature
         )
       ) {
         return false;
@@ -2663,8 +2723,8 @@
         options
       );
 
-      set.add(
-        key
+      registry.add(
+        signature
       );
 
       return true;
@@ -2673,15 +2733,13 @@
     showScreen(
       screenId
     ) {
-      const screens =
-        qsa(
-          '.screen'
-        );
-
-      screens.forEach(
+      qsa(
+        '.screen'
+      ).forEach(
         screen => {
           screen.classList.toggle(
             'active',
+
             screen.id ===
               screenId
           );
@@ -2697,7 +2755,9 @@
       ) {
         phase =
           'cinematic';
-      } else if (
+      }
+
+      if (
         screenId ===
         'screenGame'
       ) {
@@ -2715,7 +2775,9 @@
         'screen:changed',
         {
           id:
-            screenId
+            screenId,
+
+          phase
         }
       );
     }
@@ -2728,9 +2790,7 @@
           'fadeTransition'
         );
 
-      if (
-        !layer
-      ) {
+      if (!layer) {
         callback();
         return;
       }
@@ -2739,12 +2799,15 @@
         'active'
       );
 
-      const delay =
+      const reduced =
         this.state.get(
           'settings.reducedMotion'
-        )
+        );
+
+      const duration =
+        reduced
           ? 0
-          : 130;
+          : 140;
 
       setTimeout(
         () => {
@@ -2756,10 +2819,10 @@
                 'active'
               );
             },
-            delay
+            duration
           );
         },
-        delay
+        duration
       );
     }
 
@@ -2775,7 +2838,7 @@
         !overlay
       ) {
         this.logger.warn(
-          `Overlay inexistente: ${id}`
+          `Overlay não encontrado: ${id}`
         );
 
         return;
@@ -2783,8 +2846,8 @@
 
       this.overlayStack =
         this.overlayStack.filter(
-          value =>
-            value !==
+          item =>
+            item !==
             id
         );
 
@@ -2802,13 +2865,6 @@
       overlay.setAttribute(
         'aria-hidden',
         'false'
-      );
-
-      this.bus.emit(
-        'overlay:opened',
-        {
-          id
-        }
       );
 
       if (
@@ -2831,6 +2887,13 @@
       ) {
         this.renderSettings();
       }
+
+      this.bus.emit(
+        'overlay:opened',
+        {
+          id
+        }
+      );
     }
 
     closeOverlay(
@@ -2861,8 +2924,8 @@
 
       this.overlayStack =
         this.overlayStack.filter(
-          value =>
-            value !==
+          item =>
+            item !==
             id
         );
 
@@ -2901,9 +2964,7 @@
           'notificationStack'
         );
 
-      if (
-        !stack
-      ) {
+      if (!stack) {
         return;
       }
 
@@ -2915,13 +2976,30 @@
       item.className =
         `notification notification-${type}`;
 
-      item.innerHTML =
-        `<strong>${escapeHTML(
+      const titleElement =
+        document.createElement(
+          'strong'
+        );
+
+      titleElement.textContent =
+        safeText(
           title
-        )}</strong>` +
-        `<span>${escapeHTML(
+        );
+
+      const messageElement =
+        document.createElement(
+          'span'
+        );
+
+      messageElement.textContent =
+        safeText(
           message
-        )}</span>`;
+        );
+
+      item.append(
+        titleElement,
+        messageElement
+      );
 
       stack.appendChild(
         item
@@ -2952,7 +3030,7 @@
               timer
             );
           },
-          3600
+          3500
         );
 
       this.notificationTimers.add(
@@ -3022,7 +3100,7 @@
     renderStats(
       state
     ) {
-      const values = {
+      const mapping = {
         hope: [
           'hopeBar',
           'hopeValue'
@@ -3051,10 +3129,9 @@
             barId,
             valueId
           ]
-        ]
-          of Object.entries(
-            values
-          )
+        ] of Object.entries(
+          mapping
+        )
       ) {
         const value =
           clamp(
@@ -3078,6 +3155,11 @@
             `${value}%`;
 
           bar.setAttribute(
+            'role',
+            'progressbar'
+          );
+
+          bar.setAttribute(
             'aria-valuenow',
             String(
               value
@@ -3097,8 +3179,10 @@
 
         if (label) {
           label.textContent =
-            Math.round(
-              value
+            String(
+              Math.round(
+                value
+              )
             );
         }
       }
@@ -3113,73 +3197,54 @@
         ] ||
         LOCATIONS.mega_city;
 
-      const act =
-        this.el(
-          'locationAct'
-        );
+      const mapping = {
+        locationAct:
+          location.act,
 
-      const name =
-        this.el(
-          'locationName'
-        );
+        locationName:
+          location.name,
 
-      const era =
-        this.el(
-          'eraValue'
-        );
+        eraValue:
+          location.era,
 
-      const tag =
-        this.el(
-          'sceneTag'
-        );
+        sceneTag:
+          location.tag,
 
-      const description =
-        this.el(
-          'sceneDescription'
-        );
+        sceneDescription:
+          location.description,
 
-      const interaction =
-        this.el(
-          'interactionText'
-        );
+        interactionText:
+          location.interaction
+      };
 
-      const worldScene =
+      for (
+        const [
+          id,
+          value
+        ] of Object.entries(
+          mapping
+        )
+      ) {
+        const node =
+          this.el(
+            id
+          );
+
+        if (node) {
+          node.textContent =
+            safeText(
+              value
+            );
+        }
+      }
+
+      const scene =
         this.el(
           'worldScene'
         );
 
-      if (act) {
-        act.textContent =
-          location.act;
-      }
-
-      if (name) {
-        name.textContent =
-          location.name;
-      }
-
-      if (era) {
-        era.textContent =
-          location.era;
-      }
-
-      if (tag) {
-        tag.textContent =
-          location.tag;
-      }
-
-      if (description) {
-        description.textContent =
-          location.description;
-      }
-
-      if (interaction) {
-        interaction.textContent =
-          location.interaction;
-      }
-
-      if (worldScene) {
-        worldScene.dataset.location =
+      if (scene) {
+        scene.dataset.location =
           state.world.location;
       }
 
@@ -3240,6 +3305,8 @@
         return;
       }
 
+      list.replaceChildren();
+
       const missions =
         Object.values(
           state.missions
@@ -3248,8 +3315,6 @@
             mission.status !==
             'locked'
         );
-
-      list.replaceChildren();
 
       if (count) {
         count.textContent =
@@ -3263,7 +3328,8 @@
       }
 
       for (
-        const mission of missions
+        const mission
+        of missions
       ) {
         const item =
           document.createElement(
@@ -3273,29 +3339,86 @@
         item.className =
           'mission-item';
 
-        item.innerHTML =
-          `<div class="mission-item-top">` +
-          `<strong>${escapeHTML(
-            mission.title
-          )}</strong>` +
-          `<span>${mission.progress}/${mission.goal}</span>` +
-          `</div>` +
-          `<p>${escapeHTML(
-            mission.description
-          )}</p>` +
-          `<div class="mission-progress">` +
-          `<i style="width:${Math.min(
+        const top =
+          document.createElement(
+            'div'
+          );
+
+        top.className =
+          'mission-item-top';
+
+        const title =
+          document.createElement(
+            'strong'
+          );
+
+        title.textContent =
+          mission.title;
+
+        const progress =
+          document.createElement(
+            'span'
+          );
+
+        progress.textContent =
+          `${mission.progress}/${mission.goal}`;
+
+        top.append(
+          title,
+          progress
+        );
+
+        const description =
+          document.createElement(
+            'p'
+          );
+
+        description.textContent =
+          mission.description;
+
+        const progressBar =
+          document.createElement(
+            'div'
+          );
+
+        progressBar.className =
+          'mission-progress';
+
+        const progressInner =
+          document.createElement(
+            'i'
+          );
+
+        const percentage =
+          Math.min(
             100,
+
             (
-              mission.progress /
+              Number(
+                mission.progress
+              ) /
               Math.max(
                 1,
-                mission.goal
+                Number(
+                  mission.goal
+                )
               )
             ) *
               100
-          )}%"></i>` +
-          `</div>`;
+          );
+
+        progressInner.style.width =
+          `${percentage}%`;
+
+        progressBar.append(
+          progressInner
+        );
+
+        item.append(
+          top,
+          description,
+          progressBar
+        );
 
         list.appendChild(
           item
@@ -3327,7 +3450,8 @@
         );
 
       for (
-        const mission of missions
+        const mission
+        of missions
       ) {
         const item =
           document.createElement(
@@ -3337,14 +3461,35 @@
         item.className =
           'quest-detail-item';
 
-        item.innerHTML =
-          `<h3>${escapeHTML(
-            mission.title
-          )}</h3>` +
-          `<p>${escapeHTML(
-            mission.description
-          )}</p>` +
-          `<span>PROGRESSO: ${mission.progress}/${mission.goal}</span>`;
+        const title =
+          document.createElement(
+            'h3'
+          );
+
+        title.textContent =
+          mission.title;
+
+        const description =
+          document.createElement(
+            'p'
+          );
+
+        description.textContent =
+          mission.description;
+
+        const state =
+          document.createElement(
+            'span'
+          );
+
+        state.textContent =
+          `PROGRESSO: ${mission.progress}/${mission.goal}`;
+
+        item.append(
+          title,
+          description,
+          state
+        );
 
         list.appendChild(
           item
@@ -3360,7 +3505,7 @@
           'codexProgress'
         );
 
-      const entries =
+      const unlocked =
         Object.values(
           state.codex
         ).filter(
@@ -3370,7 +3515,7 @@
 
       if (progress) {
         progress.textContent =
-          `${entries.length} de ${
+          `${unlocked.length} de ${
             Object.keys(
               state.codex
             ).length
@@ -3395,7 +3540,8 @@
       );
 
       for (
-        const entry of entries
+        const entry
+        of unlocked
       ) {
         if (
           entry.id ===
@@ -3412,15 +3558,44 @@
         node.className =
           'codex-entry jc-codex-generated';
 
-        node.innerHTML =
-          `<span class="codex-label">${escapeHTML(
-            entry.category
-          )}</span>` +
-          `<p><strong>${escapeHTML(
-            entry.title
-          )}</strong><br>${escapeHTML(
+        const label =
+          document.createElement(
+            'span'
+          );
+
+        label.className =
+          'codex-label';
+
+        label.textContent =
+          entry.category;
+
+        const text =
+          document.createElement(
+            'p'
+          );
+
+        const strong =
+          document.createElement(
+            'strong'
+          );
+
+        strong.textContent =
+          entry.title;
+
+        text.append(
+          strong,
+          document.createElement(
+            'br'
+          ),
+          document.createTextNode(
             entry.text
-          )}</p>`;
+          )
+        );
+
+        node.append(
+          label,
+          text
+        );
 
         panel.appendChild(
           node
@@ -3429,8 +3604,10 @@
     }
 
     renderSettings() {
-      const state =
-        this.state.get();
+      const settings =
+        this.state.get(
+          'settings'
+        );
 
       const map = {
         settingFastText:
@@ -3462,7 +3639,7 @@
         if (input) {
           input.checked =
             Boolean(
-              state.settings[
+              settings[
                 key
               ]
             );
@@ -3474,17 +3651,19 @@
       const save =
         this.game?.save;
 
+      if (!save) {
+        return;
+      }
+
       const hasSave =
-        Boolean(
-          save?.hasSave?.()
-        );
+        save.hasSave();
 
       const payload =
         hasSave
           ? save.readRaw()
           : null;
 
-      const label =
+      const text =
         hasSave
           ? `Último registro: ${formatDate(
               payload?.timestamp
@@ -3503,28 +3682,32 @@
 
           if (node) {
             node.textContent =
-              label;
+              text;
           }
         }
       );
 
-      const load =
+      const loadButton =
         this.el(
           'loadGameButton'
         );
 
-      const del =
+      const deleteButton =
         this.el(
           'deleteSaveButton'
         );
 
-      if (load) {
-        load.disabled =
+      if (
+        loadButton
+      ) {
+        loadButton.disabled =
           !hasSave;
       }
 
-      if (del) {
-        del.disabled =
+      if (
+        deleteButton
+      ) {
+        deleteButton.disabled =
           !hasSave;
       }
     }
@@ -3564,6 +3747,10 @@
       this.game =
         game;
 
+      /* ----------------------------------------------------------------------
+         MENU PRINCIPAL / TELA INICIAL
+         ---------------------------------------------------------------------- */
+
       this.bind(
         this.el(
           'newGameButton'
@@ -3581,6 +3768,10 @@
         () =>
           game.continueGame()
       );
+
+      /* ----------------------------------------------------------------------
+         CINEMÁTICA
+         ---------------------------------------------------------------------- */
 
       this.bind(
         this.el(
@@ -3600,6 +3791,10 @@
           game.narrative.prevCinematic()
       );
 
+      /* ----------------------------------------------------------------------
+         DIÁLOGO
+         ---------------------------------------------------------------------- */
+
       this.bind(
         this.el(
           'dialogueContinueButton'
@@ -3617,6 +3812,10 @@
         () =>
           game.narrative.skipTyping()
       );
+
+      /* ----------------------------------------------------------------------
+         MUNDO
+         ---------------------------------------------------------------------- */
 
       this.bind(
         this.el(
@@ -3638,6 +3837,10 @@
           )
       );
 
+      /* ----------------------------------------------------------------------
+         SALVAMENTO
+         ---------------------------------------------------------------------- */
+
       this.bind(
         this.el(
           'quickSaveButton'
@@ -3645,17 +3848,6 @@
         'click',
         () =>
           game.save.save()
-      );
-
-      this.bind(
-        this.el(
-          'menuButton'
-        ),
-        'click',
-        () =>
-          this.openOverlay(
-            'menuOverlay'
-          )
       );
 
       this.bind(
@@ -3669,6 +3861,25 @@
           )
       );
 
+      /* ----------------------------------------------------------------------
+         MENU
+         ---------------------------------------------------------------------- */
+
+      this.bind(
+        this.el(
+          'menuButton'
+        ),
+        'click',
+        () =>
+          this.openOverlay(
+            'menuOverlay'
+          )
+      );
+
+      /* ----------------------------------------------------------------------
+         CONFIGURAÇÕES
+         ---------------------------------------------------------------------- */
+
       this.bind(
         this.el(
           'openSettingsButton'
@@ -3680,92 +3891,97 @@
           )
       );
 
-      /*
-       * ============================================================
-       * CORREÇÃO DEFINITIVA DO SISTEMA DE ESCOLHAS
-       * ============================================================
-       *
-       * IMPORTANTE:
-       *
-       * NÃO colocamos listeners em cada botão.
-       * O NarrativeEngine recria esses botões durante cada cena.
-       *
-       * O listener fica no container permanente.
-       *
-       * Portanto:
-       *
-       * cena A
-       *   ↓
-       * cria botão
-       *
-       * cena B
-       *   ↓
-       * botão é recriado
-       *
-       * O listener continua existindo.
-       * ============================================================
-       */
-
-      const choiceContainer =
-        this.el(
-          'choiceContainer'
-        );
+      /* ----------------------------------------------------------------------
+         SALVAR / CARREGAR
+         ---------------------------------------------------------------------- */
 
       this.bind(
-        choiceContainer,
+        this.el(
+          'saveGameButton'
+        ),
         'click',
-        event => {
-          const rawTarget =
-            event.target;
+        () => {
+          game.save.save();
 
-          const target =
-            rawTarget instanceof
-            Element
-              ? rawTarget.closest(
-                  'button.choice-button'
-                )
-              : null;
-
-          if (!target) {
-            return;
-          }
-
-          if (
-            !choiceContainer.contains(
-              target
-            )
-          ) {
-            return;
-          }
-
-          event.preventDefault();
-          event.stopPropagation();
-
-          if (
-            target.disabled
-          ) {
-            return;
-          }
-
-          const choiceId =
-            safeText(
-              target.dataset
-                .choiceId
-            ).trim();
-
-          if (!choiceId) {
-            this.logger.error(
-              'Botão de escolha sem ID'
-            );
-
-            return;
-          }
-
-          game.narrative.selectChoiceById(
-            choiceId
-          );
+          this.renderSaveStatus();
         }
       );
+
+      this.bind(
+        this.el(
+          'loadGameButton'
+        ),
+        'click',
+        () => {
+          game.loadSavedGame();
+        }
+      );
+
+      this.bind(
+        this.el(
+          'deleteSaveButton'
+        ),
+        'click',
+        () => {
+          game.deleteSaveWithConfirm();
+        }
+      );
+
+      /* ----------------------------------------------------------------------
+         CONFIGURAÇÕES
+         ---------------------------------------------------------------------- */
+
+      this.bind(
+        this.el(
+          'settingFastText'
+        ),
+        'change',
+        event =>
+          game.settings.set(
+            'fastText',
+            event.target.checked
+          )
+      );
+
+      this.bind(
+        this.el(
+          'settingHighContrast'
+        ),
+        'change',
+        event =>
+          game.settings.set(
+            'highContrast',
+            event.target.checked
+          )
+      );
+
+      this.bind(
+        this.el(
+          'settingReducedMotion'
+        ),
+        'change',
+        event =>
+          game.settings.set(
+            'reducedMotion',
+            event.target.checked
+          )
+      );
+
+      this.bind(
+        this.el(
+          'settingAudio'
+        ),
+        'change',
+        event =>
+          game.settings.set(
+            'audio',
+            event.target.checked
+          )
+      );
+
+      /* ----------------------------------------------------------------------
+         MENU DE OPÇÕES
+         ---------------------------------------------------------------------- */
 
       this.bind(
         this.el(
@@ -3845,104 +4061,9 @@
         }
       );
 
-      this.bind(
-        this.el(
-          'saveGameButton'
-        ),
-        'click',
-        () =>
-          game.save.save()
-      );
-
-      this.bind(
-        this.el(
-          'loadGameButton'
-        ),
-        'click',
-        () =>
-          game.loadSavedGame()
-      );
-
-      this.bind(
-        this.el(
-          'deleteSaveButton'
-        ),
-        'click',
-        () =>
-          game.deleteSaveWithConfirm()
-      );
-
-      this.bind(
-        this.el(
-          'settingFastText'
-        ),
-        'change',
-        event =>
-          game.settings.set(
-            'fastText',
-            event.target.checked
-          )
-      );
-
-      this.bind(
-        this.el(
-          'settingHighContrast'
-        ),
-        'change',
-        event =>
-          game.settings.set(
-            'highContrast',
-            event.target.checked
-          )
-      );
-
-      this.bind(
-        this.el(
-          'settingReducedMotion'
-        ),
-        'change',
-        event =>
-          game.settings.set(
-            'reducedMotion',
-            event.target.checked
-          )
-      );
-
-      this.bind(
-        this.el(
-          'settingAudio'
-        ),
-        'change',
-        event =>
-          game.settings.set(
-            'audio',
-            event.target.checked
-          )
-      );
-
-      /*
-       * Fechamento universal de overlays.
-       */
-      qsa(
-        '.overlay'
-      ).forEach(
-        overlay => {
-          this.bind(
-            overlay,
-            'click',
-            event => {
-              if (
-                event.target ===
-                overlay
-              ) {
-                this.closeOverlay(
-                  overlay.id
-                );
-              }
-            }
-          );
-        }
-      );
+      /* ----------------------------------------------------------------------
+         FECHAMENTO DE OVERLAYS
+         ---------------------------------------------------------------------- */
 
       qsa(
         '.close-button'
@@ -3969,9 +4090,31 @@
         }
       );
 
-      /*
-       * Abas do HUD.
-       */
+      qsa(
+        '.overlay'
+      ).forEach(
+        overlay => {
+          this.bind(
+            overlay,
+            'click',
+            event => {
+              if (
+                event.target ===
+                overlay
+              ) {
+                this.closeOverlay(
+                  overlay.id
+                );
+              }
+            }
+          );
+        }
+      );
+
+      /* ----------------------------------------------------------------------
+         ABAS DO HUD
+         ---------------------------------------------------------------------- */
+
       this.bind(
         document,
         'click',
@@ -3988,19 +4131,23 @@
             return;
           }
 
+          const tab =
+            target.dataset.tab;
+
           if (
-            target.dataset.tab
+            tab
           ) {
             game.activateSystemTab(
-              target.dataset.tab
+              tab
             );
           }
         }
       );
 
-      /*
-       * Tabs do laboratório visual.
-       */
+      /* ----------------------------------------------------------------------
+         ABAS DO LABORATÓRIO VISUAL
+         ---------------------------------------------------------------------- */
+
       this.bind(
         document,
         'click',
@@ -4047,6 +4194,90 @@
           game.visualLab.clear()
       );
 
+      /* ----------------------------------------------------------------------
+         ESCOLHAS — CORREÇÃO PRINCIPAL
+         ----------------------------------------------------------------------
+
+         O container #choiceContainer NÃO é destruído.
+
+         Os botões internos são recriados a cada cena.
+
+         Por isso o evento é delegado ao container.
+
+         Exemplo:
+
+         choiceContainer
+             ├── button choice #1
+             ├── button choice #2
+             └── button choice #3
+
+         Quando os botões forem recriados, o listener permanece.
+         ---------------------------------------------------------------------- */
+
+      const choiceContainer =
+        this.el(
+          'choiceContainer'
+        );
+
+      this.bind(
+        choiceContainer,
+        'click',
+        event => {
+          const source =
+            event.target;
+
+          const button =
+            source instanceof
+            Element
+              ? source.closest(
+                  'button.choice-button'
+                )
+              : null;
+
+          if (!button) {
+            return;
+          }
+
+          if (
+            !choiceContainer.contains(
+              button
+            )
+          ) {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+
+          if (
+            button.disabled
+          ) {
+            return;
+          }
+
+          const choiceId =
+            safeText(
+              button.dataset.choiceId
+            ).trim();
+
+          if (!choiceId) {
+            this.logger.error(
+              'choice-button sem data-choice-id'
+            );
+
+            return;
+          }
+
+          game.narrative.selectChoiceById(
+            choiceId
+          );
+        }
+      );
+
+      /* ----------------------------------------------------------------------
+         TECLADO
+         ---------------------------------------------------------------------- */
+
       this.bind(
         document,
         'keydown',
@@ -4055,12 +4286,14 @@
             event
           )
       );
+
+      this.renderSaveStatus();
     }
   }
 
-  /* =========================================================================
+  /* ==========================================================================
      NARRATIVE ENGINE
-     ========================================================================= */
+     ========================================================================== */
 
   class NarrativeEngine {
     constructor(
@@ -4093,6 +4326,9 @@
       this.codex =
         codex;
 
+      this.current =
+        null;
+
       this.timer =
         null;
 
@@ -4105,15 +4341,9 @@
       this.charIndex =
         0;
 
-      this.current =
-        null;
-
       /*
-       * ===========================================================
-       * CONTROLE ESPECÍFICO DAS ESCOLHAS
-       * ===========================================================
+       * CONTROLE DE TRANSAÇÃO DAS ESCOLHAS
        */
-
       this.choiceLocked =
         false;
 
@@ -4202,13 +4432,13 @@
 
       if (previous) {
         previous.disabled =
-          index ===
+          index <=
           0;
       }
 
       if (next) {
         next.textContent =
-          index ===
+          index >=
           CINEMATICS.length -
             1
             ? 'ENTRAR NA CRÔNICA'
@@ -4285,11 +4515,13 @@
     }
 
     goto(
-      id
+      sceneId
     ) {
       const safeId =
-        SCENES[id]
-          ? id
+        SCENES[
+          sceneId
+        ]
+          ? sceneId
           : 'g_intro';
 
       const scene =
@@ -4302,9 +4534,19 @@
           'narrative.currentScene'
         );
 
+      /*
+       * Nova cena.
+       */
       this.current =
-        scene;
+        {
+          ...scene,
+          id:
+            safeId
+        };
 
+      /*
+       * Cancela digitação anterior.
+       */
       clearTimeout(
         this.timer
       );
@@ -4313,18 +4555,20 @@
         false;
 
       /*
-       * Uma nova cena sempre abre uma nova
-       * janela de decisão.
+       * INICIA UMA NOVA TRANSAÇÃO DE ESCOLHA.
        */
+      this.choiceTransaction +=
+        1;
+
       this.choiceLocked =
         false;
 
       this.selectingChoice =
         false;
 
-      this.choiceTransaction +=
-        1;
-
+      /*
+       * Estado da narrativa.
+       */
       this.state.set(
         'narrative.currentScene',
         safeId,
@@ -4338,7 +4582,7 @@
       );
 
       /*
-       * Marca cena como vista.
+       * Cenas vistas.
        */
       const seen =
         this.state.get(
@@ -4356,105 +4600,37 @@
             ...seen,
             safeId
           ],
-          'narrative.seen'
+          'narrative.scene.seen'
         );
       }
 
       /*
-       * Atualiza localização.
+       * Localização.
        */
-      if (
+      this.applyLocation(
         scene.location
-      ) {
-        const discovered =
-          this.state.get(
-            'world.discovered'
-          ) || [];
-
-        if (
-          !discovered.includes(
-            scene.location
-          )
-        ) {
-          this.state.set(
-            'world.discovered',
-            [
-              ...discovered,
-              scene.location
-            ],
-            'world.discover'
-          );
-        }
-
-        const visited =
-          this.state.get(
-            'world.visited'
-          ) || [];
-
-        if (
-          !visited.includes(
-            scene.location
-          )
-        ) {
-          this.state.set(
-            'world.visited',
-            [
-              ...visited,
-              scene.location
-            ],
-            'world.visit'
-          );
-        }
-
-        this.state.set(
-          'world.location',
-          scene.location,
-          'narrative.location'
-        );
-      }
+      );
 
       /*
-       * Executa efeitos de entrada.
+       * Efeitos de entrada.
        */
       this.applyOnEnter(
         scene.onEnter
       );
 
       /*
-       * Atualiza cabeçalho do diálogo.
+       * Header do diálogo.
        */
-      const speaker =
-        byId(
-          'dialogueSpeaker'
-        );
-
-      const role =
-        byId(
-          'dialogueSpeakerRole'
-        );
-
-      const type =
-        byId(
-          'dialogueType'
-        );
-
-      if (speaker) {
-        speaker.textContent =
-          scene.speaker;
-      }
-
-      if (role) {
-        role.textContent =
-          scene.role;
-      }
-
-      if (type) {
-        type.textContent =
-          scene.type;
-      }
+      this.renderDialogueHeader(
+        scene
+      );
 
       /*
-       * Limpa e cria escolhas.
+       * ESCOLHAS PRIMEIRO.
+       *
+       * Isso é importante porque o botão
+       * já fica associado ao ID correto
+       * antes de qualquer interação.
        */
       this.renderChoices(
         scene
@@ -4467,8 +4643,14 @@
         scene.text
       );
 
+      /*
+       * Render.
+       */
       this.ui.render();
 
+      /*
+       * Evento.
+       */
       this.bus.emit(
         'scene:changed',
         {
@@ -4479,6 +4661,83 @@
 
           scene
         }
+      );
+    }
+
+    applyLocation(
+      locationId
+    ) {
+      if (
+        !locationId ||
+        !LOCATIONS[
+          locationId
+        ]
+      ) {
+        return;
+      }
+
+      const discovered =
+        this.state.get(
+          'world.discovered'
+        ) || [];
+
+      if (
+        !discovered.includes(
+          locationId
+        )
+      ) {
+        this.state.set(
+          'world.discovered',
+          [
+            ...discovered,
+            locationId
+          ],
+          'world.discover'
+        );
+      }
+
+      const visited =
+        this.state.get(
+          'world.visited'
+        ) || [];
+
+      if (
+        !visited.includes(
+          locationId
+        )
+      ) {
+        this.state.set(
+          'world.visited',
+          [
+            ...visited,
+            locationId
+          ],
+          'world.visit'
+        );
+      }
+
+      this.state.set(
+        'world.location',
+        locationId,
+        'narrative.location'
+      );
+
+      this.state.set(
+        'world.act',
+        LOCATIONS[
+          locationId
+        ].act,
+
+        'narrative.location'
+      );
+
+      this.state.set(
+        'world.era',
+        LOCATIONS[
+          locationId
+        ].era,
+
+        'narrative.location'
       );
     }
 
@@ -4529,6 +4788,46 @@
       }
     }
 
+    renderDialogueHeader(
+      scene
+    ) {
+      const speaker =
+        byId(
+          'dialogueSpeaker'
+        );
+
+      const role =
+        byId(
+          'dialogueSpeakerRole'
+        );
+
+      const type =
+        byId(
+          'dialogueType'
+        );
+
+      if (speaker) {
+        speaker.textContent =
+          safeText(
+            scene.speaker
+          );
+      }
+
+      if (role) {
+        role.textContent =
+          safeText(
+            scene.role
+          );
+      }
+
+      if (type) {
+        type.textContent =
+          safeText(
+            scene.type
+          );
+      }
+    }
+
     typeText(
       text
     ) {
@@ -4544,28 +4843,22 @@
       this.charIndex =
         0;
 
-      const element =
+      const output =
         byId(
           'dialogueText'
         );
 
-      if (!element) {
+      const cursor =
+        byId(
+          'typingCursor'
+        );
+
+      if (!output) {
         return;
       }
 
-      element.textContent =
+      output.textContent =
         '';
-
-      /*
-       * Com reducedMotion ou fastText,
-       * o texto aparece praticamente de imediato.
-       */
-      const reduced =
-        Boolean(
-          this.state.get(
-            'settings.reducedMotion'
-          )
-        );
 
       const fast =
         Boolean(
@@ -4574,18 +4867,25 @@
           )
         );
 
+      const reduced =
+        Boolean(
+          this.state.get(
+            'settings.reducedMotion'
+          )
+        );
+
       if (
-        reduced
+        fast ||
+        reduced ||
+        !this.fullText.length
       ) {
         this.typing =
           false;
 
-        element.textContent =
+        output.textContent =
           this.fullText;
 
-        byId(
-          'typingCursor'
-        )?.classList.remove(
+        cursor?.classList.remove(
           'active'
         );
 
@@ -4595,18 +4895,16 @@
       this.typing =
         true;
 
-      byId(
-        'typingCursor'
-      )?.classList.add(
+      cursor?.classList.add(
         'active'
       );
 
       const speed =
         fast
           ? 3
-          : 17;
+          : 16;
 
-      const chunk =
+      const step =
         fast
           ? 5
           : 1;
@@ -4622,11 +4920,12 @@
           this.charIndex =
             Math.min(
               this.fullText.length,
+
               this.charIndex +
-                chunk
+                step
             );
 
-          element.textContent =
+          output.textContent =
             this.fullText.slice(
               0,
               this.charIndex
@@ -4639,9 +4938,7 @@
             this.typing =
               false;
 
-            byId(
-              'typingCursor'
-            )?.classList.remove(
+            cursor?.classList.remove(
               'active'
             );
 
@@ -4660,7 +4957,7 @@
       this.state.increment(
         'statistics.dialogues',
         1,
-        'narrative.type'
+        'narrative.dialogue'
       );
     }
 
@@ -4678,13 +4975,13 @@
       this.typing =
         false;
 
-      const element =
+      const output =
         byId(
           'dialogueText'
         );
 
-      if (element) {
-        element.textContent =
+      if (output) {
+        output.textContent =
           this.fullText;
       }
 
@@ -4711,7 +5008,8 @@
         );
 
       if (
-        choices.length
+        choices.length >
+        0
       ) {
         this.ui.notify(
           'Escolha necessária',
@@ -4728,11 +5026,19 @@
         this.current?.next;
 
       if (!next) {
+        this.ui.notify(
+          'Cena concluída',
+          'Este segmento da crônica terminou.',
+          'info'
+        );
+
         return;
       }
 
       if (
-        !SCENES[next]
+        !SCENES[
+          next
+        ]
       ) {
         this.logger.error(
           'Próxima cena inexistente',
@@ -4782,14 +5088,6 @@
           }
 
           if (
-            !this.checkConditions(
-              choice.conditions
-            )
-          ) {
-            return false;
-          }
-
-          if (
             choice.once &&
             taken.includes(
               choice.id
@@ -4798,7 +5096,9 @@
             return false;
           }
 
-          return true;
+          return this.checkConditions(
+            choice.conditions
+          );
         }
       );
     }
@@ -4820,9 +5120,7 @@
             )
           );
 
-        if (
-          !value
-        ) {
+        if (!value) {
           return false;
         }
       }
@@ -4914,12 +5212,6 @@
       return true;
     }
 
-    /*
-     * ============================================================
-     * RENDERIZAÇÃO DAS ESCOLHAS
-     * ============================================================
-     */
-
     renderChoices(
       scene
     ) {
@@ -4930,19 +5222,19 @@
 
       if (!container) {
         this.logger.error(
-          'choiceContainer não existe'
+          'choiceContainer não encontrado'
         );
 
         return;
       }
 
       /*
-       * Remove apenas os botões antigos.
+       * REMOVE OS BOTÕES ANTIGOS
        */
       container.replaceChildren();
 
       /*
-       * Nova cena = nova transação.
+       * NOVA JANELA DE ESCOLHA
        */
       this.choiceLocked =
         false;
@@ -4950,18 +5242,22 @@
       this.selectingChoice =
         false;
 
-      const sceneId =
-        this.state.get(
-          'narrative.currentScene'
-        ) || '';
-
       container.dataset.sceneId =
-        sceneId;
+        safeText(
+          this.state.get(
+            'narrative.currentScene'
+          )
+        );
 
       const choices =
         this.availableChoices(
           scene
         );
+
+      container.setAttribute(
+        'aria-live',
+        'polite'
+      );
 
       container.setAttribute(
         'role',
@@ -4976,7 +5272,8 @@
       );
 
       if (
-        !choices.length
+        choices.length ===
+        0
       ) {
         return;
       }
@@ -4998,7 +5295,7 @@
             'choice-button';
 
           button.dataset.choiceId =
-            String(
+            safeText(
               choice.id
             );
 
@@ -5006,9 +5303,6 @@
             String(
               index
             );
-
-          button.tabIndex =
-            0;
 
           button.disabled =
             false;
@@ -5020,14 +5314,14 @@
 
           button.setAttribute(
             'aria-label',
+
             `Escolha ${
               index + 1
-            }: ${choice.text}`
+            }: ${
+              choice.text
+            }`
           );
 
-          /*
-           * textContent em vez de HTML não confiável.
-           */
           const number =
             document.createElement(
               'span'
@@ -5069,12 +5363,16 @@
     }
 
     /*
-     * ============================================================
-     * SELEÇÃO POR ID
-     * ============================================================
+     * ========================================================================
+     * SELEÇÃO ROBUSTA DA ESCOLHA
+     * ========================================================================
      *
-     * ESTE É O MÉTODO PRINCIPAL DA CORREÇÃO.
-     * ============================================================
+     * Toda decisão passa por este método.
+     *
+     * Nunca executar uma escolha simplesmente
+     * chamando executeChoice() diretamente.
+     *
+     * ========================================================================
      */
 
     selectChoiceById(
@@ -5088,15 +5386,11 @@
       if (
         !normalizedId
       ) {
-        this.logger.warn(
-          'Tentativa de seleção sem ID'
-        );
-
         return false;
       }
 
       /*
-       * Proteção contra dois cliques.
+       * Proteção contra duplo clique.
        */
       if (
         this.choiceLocked ||
@@ -5105,42 +5399,70 @@
         return false;
       }
 
-      const currentSceneId =
+      /*
+       * Cena realmente ativa.
+       */
+      const sceneId =
         safeText(
           this.state.get(
             'narrative.currentScene'
           )
         );
 
-      if (
-        !currentSceneId
-      ) {
+      if (!sceneId) {
+        this.logger.error(
+          'Nenhuma cena narrativa ativa'
+        );
+
         return false;
       }
 
-      const currentScene =
+      const scene =
         SCENES[
-          currentSceneId
+          sceneId
         ];
 
-      if (
-        !currentScene
-      ) {
+      if (!scene) {
         this.logger.error(
-          'Cena atual não encontrada',
-          currentSceneId
+          'Cena narrativa não encontrada',
+          sceneId
         );
 
         return false;
       }
 
       /*
-       * A escolha precisa obrigatoriamente
-       * pertencer à cena atual.
+       * Garante que o botão pertence à cena atual.
+       */
+      const container =
+        byId(
+          'choiceContainer'
+        );
+
+      if (
+        container &&
+        container.dataset.sceneId !==
+          sceneId
+      ) {
+        this.logger.warn(
+          'Container de escolhas desatualizado',
+
+          `${container.dataset.sceneId} -> ${sceneId}`
+        );
+
+        this.renderChoices(
+          scene
+        );
+
+        return false;
+      }
+
+      /*
+       * Procura somente entre escolhas realmente disponíveis.
        */
       const choices =
         this.availableChoices(
-          currentScene
+          scene
         );
 
       const choice =
@@ -5152,19 +5474,18 @@
             normalizedId
         );
 
-      if (
-        !choice
-      ) {
+      if (!choice) {
         this.logger.warn(
-          'Escolha não encontrada na cena atual',
-          `${normalizedId} @ ${currentSceneId}`
+          'Escolha inválida ou indisponível',
+
+          `${normalizedId} @ ${sceneId}`
         );
 
         return false;
       }
 
       /*
-       * Marca transação.
+       * Inicia transação.
        */
       const transaction =
         ++this.choiceTransaction;
@@ -5176,14 +5497,8 @@
         true;
 
       /*
-       * Desabilita todos os botões
-       * imediatamente.
+       * Desabilita os botões imediatamente.
        */
-      const container =
-        byId(
-          'choiceContainer'
-        );
-
       qsa(
         '.choice-button',
         container || document
@@ -5199,8 +5514,7 @@
 
           if (
             String(
-              button.dataset
-                .choiceId
+              button.dataset.choiceId
             ) ===
             normalizedId
           ) {
@@ -5213,49 +5527,44 @@
 
       try {
         /*
-         * Garantia extra:
-         * a cena não mudou desde que o clique começou.
+         * Proteção contra mudança de cena
+         * entre o começo e a execução.
          */
         if (
           transaction !==
           this.choiceTransaction
         ) {
-          return false;
+          throw new Error(
+            'Transação narrativa invalidada.'
+          );
         }
 
-        /*
-         * Executa a decisão real.
-         */
         const result =
           this.executeChoice(
             choice,
-            currentSceneId
+            sceneId
           );
 
         return result;
-
       } catch (
         error
       ) {
         this.logger.error(
-          `Erro ao executar escolha ${normalizedId}`,
+          `Falha na escolha ${normalizedId}`,
           error
         );
 
         /*
-         * Se a cena ainda for a mesma,
-         * restaura os botões.
+         * Só desbloqueia se ainda estivermos
+         * na mesma cena.
          */
-        const stillSameScene =
+        if (
           safeText(
             this.state.get(
               'narrative.currentScene'
             )
           ) ===
-          currentSceneId;
-
-        if (
-          stillSameScene
+          sceneId
         ) {
           this.choiceLocked =
             false;
@@ -5285,7 +5594,7 @@
 
         this.ui.notify(
           'Falha na decisão',
-          'A escolha não pôde ser processada. Tente novamente.',
+          'A escolha não pôde ser processada. Nenhum progresso foi perdido.',
           'error'
         );
 
@@ -5294,25 +5603,42 @@
     }
 
     /*
-     * ============================================================
-     * EXECUÇÃO REAL DA ESCOLHA
-     * ============================================================
+     * ========================================================================
+     * EXECUTA A ESCOLHA
+     * ========================================================================
      */
 
     executeChoice(
       choice,
       sceneId
     ) {
-      if (
-        !choice
-      ) {
+      if (!choice) {
         return false;
       }
 
       /*
-       * Se o texto estiver digitando,
-       * termina a digitação antes de aplicar
-       * a escolha.
+       * Determina o próximo destino ANTES das mutações.
+       */
+      const destination =
+        choice.next ||
+        SCENES[
+          sceneId
+        ]?.next ||
+        null;
+
+      if (
+        destination &&
+        !SCENES[
+          destination
+        ]
+      ) {
+        throw new Error(
+          `Destino inexistente: ${destination}`
+        );
+      }
+
+      /*
+       * Termina o texto se necessário.
        */
       if (
         this.typing
@@ -5323,37 +5649,16 @@
       this.audio.choice();
 
       /*
-       * Guarda destino antes de qualquer mutation.
+       * ==============================================================
+       * APLICA TODAS AS CONSEQUÊNCIAS
+       * ==============================================================
        */
-      const destination =
-        choice.next ||
-        SCENES[
-          sceneId
-        ]?.next;
 
-      if (
-        destination &&
-        !SCENES[
-          destination
-        ]
-      ) {
-        throw new Error(
-          `Destino narrativo inexistente: ${destination}`
-        );
-      }
-
-      /*
-       * Todas as consequências da escolha
-       * são aplicadas como uma unidade.
-       */
       this.state.batch(
         () => {
           /*
-           * ---------------------------------------------------------
-           * EFEITOS
-           * ---------------------------------------------------------
+           * Efeitos estatísticos
            */
-
           const effects =
             isObject(
               choice.effects
@@ -5369,27 +5674,6 @@
               effects
             )
           ) {
-            const allowedStats =
-              new Set([
-                'hope',
-                'freedom',
-                'control',
-                'temporal'
-              ]);
-
-            if (
-              !allowedStats.has(
-                key
-              )
-            ) {
-              this.logger.warn(
-                'Efeito desconhecido ignorado',
-                key
-              );
-
-              continue;
-            }
-
             this.state.adjustStat(
               key,
               Number(
@@ -5400,11 +5684,8 @@
           }
 
           /*
-           * ---------------------------------------------------------
-           * FLAGS
-           * ---------------------------------------------------------
+           * Flags
            */
-
           const flags =
             isObject(
               choice.flags
@@ -5423,54 +5704,45 @@
             this.state.set(
               `narrative.flags.${key}`,
               value,
+
               `choice.${choice.id}`
             );
           }
 
           /*
-           * ---------------------------------------------------------
-           * REGISTRO DA ESCOLHA
-           * ---------------------------------------------------------
+           * Histórico da escolha
            */
-
-          const taken =
+          const choices =
             this.state.get(
               'narrative.choices'
             ) || [];
 
-          if (
-            !taken.includes(
+          this.state.set(
+            'narrative.choices',
+            [
+              ...choices,
               choice.id
-            )
-          ) {
-            this.state.set(
-              'narrative.choices',
-              [
-                ...taken,
-                choice.id
-              ],
-              `choice.${choice.id}`
-            );
-          }
+            ],
+
+            `choice.${choice.id}`
+          );
 
           /*
-           * ---------------------------------------------------------
-           * ESTATÍSTICA
-           * ---------------------------------------------------------
+           * Estatística
            */
-
           this.state.increment(
             'statistics.choices',
             1,
+
             `choice.${choice.id}`
           );
         },
+
         `choice.${choice.id}`
       );
 
       /*
-       * Códex fora do batch,
-       * porque ele próprio gera seus eventos.
+       * Códex
        */
       if (
         choice.codex
@@ -5481,7 +5753,7 @@
       }
 
       /*
-       * Missões.
+       * Missões
        */
       if (
         Array.isArray(
@@ -5507,7 +5779,7 @@
       }
 
       /*
-       * Publica evento da escolha.
+       * Evento global.
        */
       this.bus.emit(
         'choice:selected',
@@ -5519,18 +5791,15 @@
             sceneId,
 
           next:
-            destination ||
-            null
+            destination
         }
       );
 
       /*
-       * Se não existe próxima cena,
-       * consideramos o fluxo encerrado.
+       * Se não existir destino,
+       * encerra o segmento.
        */
-      if (
-        !destination
-      ) {
+      if (!destination) {
         this.selectingChoice =
           false;
 
@@ -5539,7 +5808,7 @@
 
         this.ui.notify(
           'Decisão registrada',
-          `Escolha: ${choice.text}`,
+          'A escolha foi armazenada na crônica.',
           'success'
         );
 
@@ -5547,15 +5816,15 @@
       }
 
       /*
-       * Muda para a próxima cena.
+       * CAMINHO PRINCIPAL:
+       * próxima cena.
        */
       this.goto(
         destination
       );
 
       /*
-       * A nova cena já recriou
-       * suas próprias escolhas.
+       * goto() já abriu uma nova transação.
        */
       this.selectingChoice =
         false;
@@ -5563,12 +5832,13 @@
       this.choiceLocked =
         false;
 
+      /*
+       * Autosave será disparado
+       * pelo StateManager/EventBus.
+       */
       return true;
     }
 
-    /*
-     * Seleção por teclado.
-     */
     selectChoiceByIndex(
       index
     ) {
@@ -5586,11 +5856,11 @@
       }
 
       const choice =
-        choices[index];
+        choices[
+          index
+        ];
 
-      if (
-        !choice
-      ) {
+      if (!choice) {
         return false;
       }
 
@@ -5600,9 +5870,9 @@
     }
   }
 
-  /* =========================================================================
+  /* ==========================================================================
      SETTINGS MANAGER
-     ========================================================================= */
+     ========================================================================== */
 
   class SettingsManager {
     constructor(
@@ -5657,7 +5927,7 @@
         error
       ) {
         this.logger.warn(
-          'Configurações antigas ignoradas',
+          'Configurações anteriores ignoradas',
           error
         );
       }
@@ -5694,6 +5964,7 @@
       try {
         localStorage.setItem(
           SETTINGS_KEY,
+
           JSON.stringify(
             this.state.get(
               'settings'
@@ -5704,7 +5975,7 @@
         error
       ) {
         this.logger.warn(
-          'Não foi possível persistir configurações',
+          'Não foi possível salvar configurações',
           error
         );
       }
@@ -5713,18 +5984,21 @@
         'settings:changed',
         {
           key,
+
           value:
             Boolean(
               value
             )
         }
       );
+
+      this.ui.render();
     }
   }
 
-  /* =========================================================================
-     PARTICLES
-     ========================================================================= */
+  /* ==========================================================================
+     PARTICLE SYSTEM
+     ========================================================================== */
 
   class ParticleSystem {
     constructor(
@@ -5746,43 +6020,36 @@
           'backgroundParticles'
         );
 
-      if (
-        !this.container
-      ) {
+      if (!this.container) {
         return;
       }
 
       this.stop();
 
-      const reduced =
+      if (
         this.state.get(
           'settings.reducedMotion'
-        );
-
-      if (
-        reduced
+        )
       ) {
         return;
       }
 
-      this.spawnLoop();
+      this.loop();
     }
 
-    spawnLoop() {
+    loop() {
       this.spawn();
 
       this.timer =
         setTimeout(
           () =>
-            this.spawnLoop(),
+            this.loop(),
           1100
         );
     }
 
     spawn() {
-      if (
-        !this.container
-      ) {
+      if (!this.container) {
         return;
       }
 
@@ -5835,16 +6102,15 @@
     }
   }
 
-  /* =========================================================================
+  /* ==========================================================================
      VISUAL LAB
-     ========================================================================= */
+     ========================================================================== */
 
   class VisualLab {
     constructor(
       state,
       bus,
-      logger,
-      ui
+      logger
     ) {
       this.state =
         state;
@@ -5854,9 +6120,6 @@
 
       this.logger =
         logger;
-
-      this.ui =
-        ui;
 
       this.canvas =
         null;
@@ -5870,7 +6133,7 @@
       this.initialized =
         false;
 
-      this.animationFrame =
+      this.frame =
         null;
 
       this.lastRefresh =
@@ -5883,9 +6146,7 @@
           'visualLabCanvas'
         );
 
-      if (
-        this.canvas
-      ) {
+      if (this.canvas) {
         this.context =
           this.canvas.getContext(
             '2d'
@@ -5903,7 +6164,9 @@
           this.resize()
       );
 
-      this.refresh();
+      this.refresh(
+        true
+      );
     }
 
     resize() {
@@ -5931,7 +6194,7 @@
           180,
           Math.floor(
             rect.height ||
-              280
+              260
           )
         );
 
@@ -5991,6 +6254,7 @@
         tab => {
           tab.classList.toggle(
             'active',
+
             (
               tab.dataset.mode ||
               'process'
@@ -6021,7 +6285,7 @@
         !force &&
         now -
           this.lastRefresh <
-          35
+          30
       ) {
         return;
       }
@@ -6030,6 +6294,7 @@
         now;
 
       this.updateDOM();
+
       this.draw();
     }
 
@@ -6037,7 +6302,7 @@
       const flow =
         this.logger.lastFlow;
 
-      const map = {
+      const mapping = {
         visualLabAction:
           this.getActionLabel(),
 
@@ -6088,10 +6353,9 @@
         const [
           id,
           value
-        ]
-          of Object.entries(
-            map
-          )
+        ] of Object.entries(
+          mapping
+        )
       ) {
         const node =
           byId(
@@ -6116,13 +6380,13 @@
           this.buildContext();
       }
 
-      const domTree =
+      const tree =
         byId(
           'visualLabDomTree'
         );
 
-      if (domTree) {
-        domTree.textContent =
+      if (tree) {
+        tree.textContent =
           this.buildDOMTree();
       }
 
@@ -6142,13 +6406,9 @@
         );
 
       if (log) {
-        const latest =
-          this.logger.latest(
-            9
-          );
-
         log.textContent =
-          latest
+          this.logger
+            .latest(9)
             .map(
               entry =>
                 `[${entry.time}] ${entry.level.toUpperCase()} — ${entry.message}`
@@ -6170,55 +6430,38 @@
     }
 
     getActionLabel() {
-      if (
-        this.mode ===
-        'dom'
-      ) {
-        return 'ANÁLISE // DOM';
-      }
+      const labels = {
+        process:
+          'LIVE PROCESS // ENGINE',
 
-      if (
-        this.mode ===
-        'css'
-      ) {
-        return 'ANÁLISE // CSS';
-      }
+        dom:
+          'ANÁLISE // DOM',
 
-      if (
-        this.mode ===
-        'js'
-      ) {
-        return 'ANÁLISE // JAVASCRIPT';
-      }
+        css:
+          'ANÁLISE // CSS',
 
-      if (
-        this.mode ===
-        'system'
-      ) {
-        return 'ANÁLISE // SISTEMA';
-      }
+        js:
+          'ANÁLISE // JAVASCRIPT',
 
-      return 'LIVE PROCESS // ENGINE';
+        system:
+          'ANÁLISE // SISTEMA'
+      };
+
+      return (
+        labels[
+          this.mode
+        ] ||
+        labels.process
+      );
     }
 
     getTargetLabel() {
-      const sceneId =
+      return (
         this.state.get(
           'narrative.currentScene'
-        );
-
-      const scene =
-        SCENES[
-          sceneId
-        ];
-
-      if (
-        scene
-      ) {
-        return sceneId;
-      }
-
-      return 'SYSTEM';
+        ) ||
+        'SYSTEM'
+      );
     }
 
     buildContext() {
@@ -6232,9 +6475,7 @@
           sceneId
         ];
 
-      if (
-        !scene
-      ) {
+      if (!scene) {
         return 'Nenhuma cena ativa.';
       }
 
@@ -6244,9 +6485,8 @@
         `TIPO: ${scene.type}`,
         `LOCAL: ${scene.location}`,
         `ESCOLHAS: ${
-          this.state.get(
-            'narrative.choices'
-          )?.length || 0
+          scene.choices?.length ||
+          0
         }`,
         `FASE: ${
           this.state.get(
@@ -6261,17 +6501,31 @@
     buildDOMTree() {
       return [
         'DOCUMENT',
+
         '├── HEADER',
+
         '│   ├── BRAND',
+
         '│   ├── STATUS',
+
         '│   └── ACTIONS',
+
         '├── MAIN',
-        '│   ├── TITLE / CINEMATIC',
+
+        '│   ├── TITLE',
+
+        '│   ├── CINEMATIC',
+
         '│   └── GAME',
+
         '│       ├── PLAYER HUD',
+
         '│       ├── WORLD',
+
         '│       ├── DIALOGUE',
+
         '│       └── SYSTEM HUD',
+
         '└── OVERLAYS'
       ].join(
         '\n'
@@ -6289,91 +6543,93 @@
           sceneId
         ];
 
-      const choiceCount =
-        scene?.choices?.length ||
-        0;
-
-      const activeLocation =
-        this.state.get(
-          'world.location'
-        );
-
       return [
-        `SCENE WIDTH     AUTO`,
-        `SCENE HEIGHT    AUTO`,
-        `DISPLAY         GRID`,
-        `LOCATION        ${activeLocation}`,
-        `CHOICES         ${choiceCount}`,
-        `TEMPORAL        ${Math.round(
-          this.state.get(
-            'player.stats.temporal'
-          ) || 0
-        )}%`
+        'WIDTH       AUTO',
+
+        'HEIGHT      AUTO',
+
+        'DISPLAY     GRID',
+
+        `SCENE       ${sceneId}`,
+
+        `LOCATION    ${this.state.get(
+          'world.location'
+        )}`,
+
+        `CHOICES     ${
+          scene?.choices?.length ||
+          0
+        }`,
+
+        `TEMPORAL    ${
+          Math.round(
+            this.state.get(
+              'player.stats.temporal'
+            ) || 0
+          )
+        }%`
       ].join(
         '\n'
       );
     }
 
     buildTests() {
-      const checks = [];
-
-      checks.push(
-        [
-          'DOM',
-          Boolean(
-            byId(
-              'choiceContainer'
-            )
+      const choice =
+        Boolean(
+          byId(
+            'choiceContainer'
           )
-            ? 'OK'
-            : 'FAIL'
-        ].join(
-          '    '
-        )
-      );
+        );
 
-      checks.push(
-        [
-          'NARRATIVE',
-          this.state.get(
-            'narrative.currentScene'
-          )
-            ? 'OK'
-            : 'FAIL'
-        ].join(
-          '    '
-        )
-      );
+      const sceneId =
+        this.state.get(
+          'narrative.currentScene'
+        );
 
-      checks.push(
-        [
-          'STATE',
+      const scene =
+        Boolean(
+          SCENES[
+            sceneId
+          ]
+        );
+
+      const phase =
+        Boolean(
           this.state.get(
             'phase'
           )
+        );
+
+      return [
+        `DOM         ${
+          choice
             ? 'OK'
             : 'FAIL'
-        ].join(
-          '    '
-        )
-      );
+        }`,
 
-      checks.push(
-        [
-          'SCENE',
-          SCENES[
-            this.state.get(
-              'narrative.currentScene'
-            )
-          ]
+        `STATE       ${
+          phase
             ? 'OK'
             : 'FAIL'
-        ].join(
-          '    '
-        )
-      );
+        }`,
 
-      return checks.join(
+        `SCENE       ${
+          scene
+            ? 'OK'
+            : 'FAIL'
+        }`,
+
+        `CHOICES     ${
+          this.state.get(
+            'narrative.choices'
+          )?.length ||
+          0
+        }`,
+
+        `EVENTS      ${
+          this.logger.eventCount
+        }`
+      ].join(
         '\n'
       );
     }
@@ -6403,7 +6659,7 @@
           180,
           Math.floor(
             rect.height ||
-              280
+              260
           )
         );
 
@@ -6434,7 +6690,7 @@
       );
 
       /*
-       * GRID
+       * GRADE
        */
       ctx.strokeStyle =
         'rgba(139,200,255,.16)';
@@ -6448,14 +6704,17 @@
         x += 32
       ) {
         ctx.beginPath();
+
         ctx.moveTo(
           x,
           0
         );
+
         ctx.lineTo(
           x,
           height
         );
+
         ctx.stroke();
       }
 
@@ -6465,35 +6724,23 @@
         y += 32
       ) {
         ctx.beginPath();
+
         ctx.moveTo(
           0,
           y
         );
+
         ctx.lineTo(
           width,
           y
         );
+
         ctx.stroke();
       }
 
       /*
-       * NÓS.
+       * NÓS DO FLUXO
        */
-
-      const sceneId =
-        this.state.get(
-          'narrative.currentScene'
-        );
-
-      const scene =
-        SCENES[
-          sceneId
-        ];
-
-      const choiceCount =
-        scene?.choices?.length ||
-        0;
-
       const nodes = [
         {
           label:
@@ -6503,7 +6750,7 @@
             width * 0.18,
 
           y:
-            height * 0.5
+            height * 0.48
         },
 
         {
@@ -6541,10 +6788,10 @@
       ];
 
       /*
-       * Conexões.
+       * CONEXÕES
        */
       ctx.strokeStyle =
-        'rgba(114,246,220,.32)';
+        'rgba(114,246,220,.34)';
 
       ctx.lineWidth =
         1.5;
@@ -6572,59 +6819,61 @@
       }
 
       /*
-       * Nós.
+       * NÓS
        */
-      for (
-        const node of nodes
-      ) {
-        ctx.beginPath();
+      nodes.forEach(
+        node => {
+          ctx.beginPath();
 
-        ctx.arc(
-          node.x,
-          node.y,
-          19,
-          0,
-          Math.PI * 2
-        );
+          ctx.arc(
+            node.x,
+            node.y,
+            18,
+            0,
+            Math.PI * 2
+          );
 
-        ctx.fillStyle =
-          'rgba(114,246,220,.30)';
+          ctx.fillStyle =
+            'rgba(114,246,220,.26)';
 
-        ctx.fill();
+          ctx.fill();
 
-        ctx.beginPath();
+          ctx.beginPath();
 
-        ctx.arc(
-          node.x,
-          node.y,
-          5,
-          0,
-          Math.PI * 2
-        );
+          ctx.arc(
+            node.x,
+            node.y,
+            5,
+            0,
+            Math.PI * 2
+          );
 
-        ctx.fillStyle =
-          'rgba(240,250,255,.95)';
+          ctx.fillStyle =
+            'rgba(240,250,255,.95)';
 
-        ctx.fill();
+          ctx.fill();
 
-        ctx.font =
-          '700 10px ui-monospace, monospace';
+          ctx.font =
+            '700 10px ui-monospace, monospace';
 
-        ctx.fillStyle =
-          'rgba(220,239,255,.82)';
+          ctx.textAlign =
+            'center';
 
-        ctx.textAlign =
-          'center';
+          ctx.fillStyle =
+            'rgba(220,239,255,.82)';
 
-        ctx.fillText(
-          node.label,
-          node.x,
-          node.y + 33
-        );
-      }
+          ctx.fillText(
+            node.label,
+
+            node.x,
+
+            node.y + 31
+          );
+        }
+      );
 
       /*
-       * Telemetria.
+       * TELEMETRIA
        */
       ctx.textAlign =
         'left';
@@ -6635,7 +6884,7 @@
       ctx.fillStyle =
         'rgba(220,239,255,.72)';
 
-      const lines = [
+      const telemetry = [
         `PHASE  ${safeText(
           this.state.get(
             'phase'
@@ -6643,25 +6892,27 @@
         ).toUpperCase()}`,
 
         `SCENE  ${safeText(
-          sceneId
+          this.state.get(
+            'narrative.currentScene'
+          )
         )}`,
-
-        `CHOICE ${choiceCount}`,
 
         `EVENTS ${this.logger.eventCount}`,
 
-        `MUT    ${this.logger.mutationCount}`
+        `MUT    ${this.logger.mutationCount}`,
+
+        `MODE   ${this.mode.toUpperCase()}`
       ];
 
-      lines.forEach(
+      telemetry.forEach(
         (
           line,
           index
         ) => {
           ctx.fillText(
             line,
-            14,
-            17 +
+            12,
+            18 +
               index *
                 15
           );
@@ -6669,7 +6920,7 @@
       );
 
       /*
-       * Scanner animado.
+       * SCANNER
        */
       if (
         !this.state.get(
@@ -6681,13 +6932,19 @@
           0.0005;
 
         const scanX =
-          ((Math.sin(t) +
-            1) /
-            2) *
+          (
+            (
+              Math.sin(
+                t
+              ) +
+              1
+            ) /
+            2
+          ) *
           width;
 
         ctx.strokeStyle =
-          'rgba(114,246,220,.20)';
+          'rgba(114,246,220,.18)';
 
         ctx.beginPath();
 
@@ -6703,7 +6960,11 @@
 
         ctx.stroke();
 
-        this.animationFrame =
+        cancelAnimationFrame(
+          this.frame
+        );
+
+        this.frame =
           requestAnimationFrame(
             () =>
               this.draw()
@@ -6728,7 +6989,7 @@
 
       const height =
         rect.height ||
-        280;
+        260;
 
       this.context.clearRect(
         0,
@@ -6739,9 +7000,9 @@
     }
   }
 
-  /* =========================================================================
+  /* ==========================================================================
      GAME CONTROLLER
-     ========================================================================= */
+     ========================================================================== */
 
   class GameController {
     constructor() {
@@ -6777,6 +7038,7 @@
         new MissionManager(
           this.state,
           this.bus,
+
           (...args) =>
             this.ui.notify(
               ...args
@@ -6787,6 +7049,7 @@
         new CodexManager(
           this.state,
           this.bus,
+
           (...args) =>
             this.ui.notify(
               ...args
@@ -6798,6 +7061,7 @@
           this.state,
           this.bus,
           this.logger,
+
           (...args) =>
             this.ui.notify(
               ...args
@@ -6832,8 +7096,7 @@
         new VisualLab(
           this.state,
           this.bus,
-          this.logger,
-          this.ui
+          this.logger
         );
 
       this.started =
@@ -6845,7 +7108,7 @@
       this.lastClock =
         performance.now();
 
-      this.renderQueued =
+      this.renderScheduled =
         false;
 
       this.lastRender =
@@ -6865,19 +7128,6 @@
       window.game =
         this;
 
-      /*
-       * Ordem importante:
-       *
-       * 1. configurações
-       * 2. eventos
-       * 3. listeners
-       * 4. render
-       * 5. cinemática
-       * 6. laboratório
-       * 7. partículas
-       * 8. relógio
-       */
-
       this.settings.load();
 
       this.bindSystemEvents();
@@ -6896,30 +7146,13 @@
 
       this.startPlayClock();
 
-      /*
-       * Garante título visual inicial.
-       */
       this.ui.showScreen(
         'screenTitle'
       );
 
-      /*
-       * Atualiza estado visual sem recriar
-       * a narrativa.
-       */
       this.ui.render();
 
-      if (
-        this.save.hasSave()
-      ) {
-        this.updateContinueButton();
-
-        this.ui.notify(
-          'Crônica encontrada',
-          'Um progresso local está disponível para continuar.',
-          'info'
-        );
-      }
+      this.updateContinueButton();
 
       this.logger.info(
         'JESUS CHRONICLES inicializado',
@@ -6933,9 +7166,7 @@
 
     bindSystemEvents() {
       /*
-       * Estado mudou.
-       *
-       * Renderização central controlada.
+       * Estado.
        */
       this.bus.on(
         'state:changed',
@@ -6958,11 +7189,18 @@
         'state:reset',
         () => {
           this.scheduleRender();
-          this.visualLab.refresh();
+
+          this.visualLab.refresh(
+            true
+          );
         }
       );
 
+      /*
+       * Eventos importantes.
+       */
       [
+        'screen:changed',
         'scene:changed',
         'choice:selected',
         'mission:updated',
@@ -6978,16 +7216,19 @@
           this.bus.on(
             eventName,
             () => {
+              this.scheduleRender();
+
               this.visualLab.refresh(
                 true
               );
-
-              this.scheduleRender();
             }
           );
         }
       );
 
+      /*
+       * Erros globais.
+       */
       window.addEventListener(
         'error',
         event => {
@@ -7019,41 +7260,39 @@
     }
 
     scheduleRender() {
+      if (
+        this.renderScheduled
+      ) {
+        return;
+      }
+
+      this.renderScheduled =
+        true;
+
+      requestAnimationFrame(
+        () => {
+          this.renderScheduled =
+            false;
+
+          this.render();
+        }
+      );
+    }
+
+    render() {
       const now =
         performance.now();
 
       if (
-        this.renderQueued
-      ) {
-        return;
-      }
-
-      if (
         now -
           this.lastRender <
-        12
+        8
       ) {
-        this.renderQueued =
-          true;
-
-        requestAnimationFrame(
-          () => {
-            this.renderQueued =
-              false;
-
-            this.render();
-          }
-        );
-
         return;
       }
 
-      this.render();
-    }
-
-    render() {
       this.lastRender =
-        performance.now();
+        now;
 
       try {
         this.ui.render();
@@ -7063,32 +7302,10 @@
         error
       ) {
         this.logger.error(
-          'Falha no render',
+          'Erro de renderização',
           error
         );
       }
-    }
-
-    updateContinueButton() {
-      const button =
-        byId(
-          'continueButton'
-        );
-
-      if (!button) {
-        return;
-      }
-
-      const hasSave =
-        this.save.hasSave();
-
-      button.classList.toggle(
-        'hidden',
-        !hasSave
-      );
-
-      button.disabled =
-        false;
     }
 
     shouldAutosave(
@@ -7138,7 +7355,36 @@
         return false;
       }
 
+      if (
+        normalized ===
+        'settings.change'
+      ) {
+        return false;
+      }
+
       return true;
+    }
+
+    updateContinueButton() {
+      const button =
+        byId(
+          'continueButton'
+        );
+
+      if (!button) {
+        return;
+      }
+
+      const available =
+        this.save.hasSave();
+
+      button.classList.toggle(
+        'hidden',
+        !available
+      );
+
+      button.disabled =
+        false;
     }
 
     startPlayClock() {
@@ -7163,8 +7409,10 @@
             const delta =
               Math.min(
                 5000,
+
                 Math.max(
                   0,
+
                   now -
                     this.lastClock
                 )
@@ -7180,30 +7428,19 @@
               return;
             }
 
-            const next =
-              Number(
-                this.state.get(
-                  'meta.playSeconds'
-                )
-              ) || 0;
-
-            /*
-             * Relógio não dispara renderização.
-             * Só sincroniza periodicamente.
-             */
             this.state.silentDepth +=
               1;
 
             try {
-              this.state.state.meta.playSeconds =
-                next +
+              this.state.state.meta.playSeconds +=
                 delta /
-                  1000;
+                1000;
             } finally {
               this.state.silentDepth -=
                 1;
             }
           },
+
           PLAY_CLOCK_INTERVAL
         );
     }
@@ -7218,43 +7455,6 @@
       this.narrative.typing =
         false;
 
-      this.state.reset(
-        true
-      );
-
-      this.state.batch(
-        () => {
-          this.state.set(
-            'meta.createdAt',
-            nowISO(),
-            'newGame'
-          );
-
-          this.state.set(
-            'narrative.cinematicIndex',
-            0,
-            'newGame'
-          );
-
-          this.state.set(
-            'narrative.currentScene',
-            'g_intro',
-            'newGame'
-          );
-
-          this.state.set(
-            'phase',
-            'cinematic',
-            'newGame'
-          );
-        },
-        'newGame'
-      );
-
-      /*
-       * Faz o engine esquecer
-       * qualquer escolha anterior.
-       */
       this.narrative.current =
         null;
 
@@ -7264,6 +7464,31 @@
       this.narrative.selectingChoice =
         false;
 
+      this.narrative.choiceTransaction +=
+        1;
+
+      this.state.reset(
+        true
+      );
+
+      this.state.set(
+        'meta.createdAt',
+        nowISO(),
+        'newGame'
+      );
+
+      this.state.set(
+        'narrative.currentScene',
+        'g_intro',
+        'newGame'
+      );
+
+      this.state.set(
+        'narrative.cinematicIndex',
+        0,
+        'newGame'
+      );
+
       this.ui.transition(
         () => {
           this.ui.showScreen(
@@ -7272,10 +7497,6 @@
 
           this.narrative.renderCinematic();
         }
-      );
-
-      this.logger.info(
-        'Nova crônica iniciada'
       );
 
       this.visualLab.refresh(
@@ -7288,10 +7509,10 @@
     }
 
     loadSavedGame() {
-      const ok =
+      const loaded =
         this.save.load();
 
-      if (!ok) {
+      if (!loaded) {
         this.render();
 
         return false;
@@ -7343,11 +7564,37 @@
 
       this.render();
 
-      this.logger.info(
-        'Save carregado'
+      this.visualLab.refresh(
+        true
       );
 
       return true;
+    }
+
+    deleteSaveWithConfirm() {
+      if (
+        !this.save.hasSave()
+      ) {
+        return false;
+      }
+
+      const confirmed =
+        window.confirm(
+          'Apagar o save local desta crônica?'
+        );
+
+      if (
+        !confirmed
+      ) {
+        return false;
+      }
+
+      const result =
+        this.save.delete();
+
+      this.render();
+
+      return result;
     }
 
     restartToTitle() {
@@ -7364,7 +7611,8 @@
       this.narrative.selectingChoice =
         false;
 
-      this.ui.closeTopOverlay();
+      this.narrative.choiceTransaction +=
+        1;
 
       this.ui.transition(
         () => {
@@ -7374,39 +7622,9 @@
         }
       );
 
-      this.logger.info(
-        'Retorno ao título sem apagar save'
-      );
-
       this.visualLab.refresh(
         true
       );
-    }
-
-    deleteSaveWithConfirm() {
-      if (
-        !this.save.hasSave()
-      ) {
-        return false;
-      }
-
-      const confirmed =
-        window.confirm(
-          'Apagar o save local desta crônica? Esta ação não pode ser desfeita neste navegador.'
-        );
-
-      if (
-        !confirmed
-      ) {
-        return false;
-      }
-
-      const ok =
-        this.save.delete();
-
-      this.render();
-
-      return ok;
     }
 
     inspect() {
@@ -7438,12 +7656,6 @@
           'world.location'
         );
 
-      const location =
-        LOCATIONS[
-          locationId
-        ] ||
-        LOCATIONS.mega_city;
-
       const messages = {
         mega_city:
           'Sinais civis ainda funcionam em intervalos. Há zonas onde a população resiste fora dos protocolos.',
@@ -7455,7 +7667,7 @@
           'Os registros ocultos possuem lacunas deliberadas. Alguém decidiu quais partes da história deveriam sobreviver.',
 
         transit:
-          'A passagem não é um corredor: é uma sobreposição de possibilidades. Cada segundo parece pertencer a mais de um lugar.',
+          'A passagem não é um corredor: é uma sobreposição de possibilidades.',
 
         galilee:
           'Antes de interferir, observe. Pessoas reais não sabem que você veio de uma era diferente.'
@@ -7467,11 +7679,18 @@
       );
 
       this.ui.notify(
-        `LEITURA // ${location.name.toUpperCase()}`,
+        `LEITURA // ${safeText(
+          LOCATIONS[
+            locationId
+          ]?.name ||
+            locationId
+        ).toUpperCase()}`,
+
         messages[
           locationId
         ] ||
           'Nenhum dado adicional disponível.',
+
         'info'
       );
 
@@ -7550,14 +7769,6 @@
       );
     }
 
-    selectChoiceByIndex(
-      index
-    ) {
-      return this.narrative.selectChoiceByIndex(
-        index
-      );
-    }
-
     handleKey(
       event
     ) {
@@ -7599,14 +7810,17 @@
         return;
       }
 
-      /*
-       * TELAS NÃO JOGO
-       */
-      if (
+      const phase =
         this.state.get(
           'phase'
-        ) !==
-        'game'
+        );
+
+      /*
+       * CINEMÁTICA
+       */
+      if (
+        phase ===
+        'cinematic'
       ) {
         if (
           event.key ===
@@ -7614,21 +7828,24 @@
         ) {
           event.preventDefault();
 
-          if (
-            this.state.get(
-              'phase'
-            ) ===
-            'cinematic'
-          ) {
-            this.narrative.nextCinematic();
-          }
+          this.narrative.nextCinematic();
         }
 
         return;
       }
 
       /*
-       * E = INSPECIONAR
+       * JOGO
+       */
+      if (
+        phase !==
+        'game'
+      ) {
+        return;
+      }
+
+      /*
+       * INSPEÇÃO
        */
       if (
         event.key.toLowerCase() ===
@@ -7642,9 +7859,7 @@
       }
 
       /*
-       * Enter:
-       * primeiro termina texto,
-       * depois avança.
+       * ENTER
        */
       if (
         event.key ===
@@ -7658,7 +7873,7 @@
       }
 
       /*
-       * Teclas numéricas.
+       * ESCOLHAS 1-9
        */
       if (
         /^[1-9]$/.test(
@@ -7667,7 +7882,7 @@
       ) {
         event.preventDefault();
 
-        this.selectChoiceByIndex(
+        this.narrative.selectChoiceByIndex(
           Number(
             event.key
           ) - 1
@@ -7676,9 +7891,9 @@
     }
   }
 
-  /* =========================================================================
+  /* ==========================================================================
      BOOT
-     ========================================================================= */
+     ========================================================================== */
 
   const boot = () => {
     try {
@@ -7693,26 +7908,9 @@
       document.documentElement.dataset.jcBoot =
         'ok';
 
-      /*
-       * Diagnóstico rápido.
-       */
-      const choiceContainer =
-        byId(
-          'choiceContainer'
-        );
-
-      if (
-        choiceContainer
-      ) {
-        console.info(
-          '[JC] choiceContainer OK'
-        );
-      } else {
-        console.warn(
-          '[JC] choiceContainer não encontrado'
-        );
-      }
-
+      console.info(
+        '[JC] Boot concluído'
+      );
     } catch (
       error
     ) {
@@ -7729,9 +7927,7 @@
           'notificationStack'
         );
 
-      if (
-        stack
-      ) {
+      if (stack) {
         const item =
           document.createElement(
             'div'
@@ -7740,9 +7936,26 @@
         item.className =
           'notification notification-error show';
 
-        item.innerHTML =
-          '<strong>Falha ao iniciar</strong>' +
-          '<span>O sistema detectou um erro na inicialização.</span>';
+        const title =
+          document.createElement(
+            'strong'
+          );
+
+        title.textContent =
+          'Falha ao iniciar';
+
+        const message =
+          document.createElement(
+            'span'
+          );
+
+        message.textContent =
+          'O sistema detectou um erro na inicialização. Verifique o console do navegador.';
+
+        item.append(
+          title,
+          message
+        );
 
         stack.appendChild(
           item
