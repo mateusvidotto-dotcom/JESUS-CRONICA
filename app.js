@@ -4376,3 +4376,460 @@ JESUS CHRONICLES — CORE ENGINE
         );
         ctx.stroke();
       }
+
+      const reduced = !!this.state.get('settings.reducedMotion');
+      const flow = this.logger.lastFlow;
+      const phase = this.state.get('phase');
+      const stability = Number(this.state.get('player.stats.temporal')) || 0;
+      const eventPulse = Math.min(1, (this.logger.eventCount % 12) / 12);
+
+      // Fundo técnico
+      ctx.fillStyle = 'rgba(4, 8, 15, 0.94)';
+      ctx.fillRect(0, 0, width, height);
+
+      const gradient = ctx.createRadialGradient(
+        width * 0.52,
+        height * 0.46,
+        8,
+        width * 0.52,
+        height * 0.46,
+        Math.max(width, height) * 0.7
+      );
+      gradient.addColorStop(0, 'rgba(80, 170, 235, 0.10)');
+      gradient.addColorStop(0.55, 'rgba(20, 75, 120, 0.035)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+
+      // Grade horizontal
+      ctx.strokeStyle = 'rgba(139,200,255,.12)';
+      for (let y = 0; y < height; y += 24) {
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(width, y + 0.5);
+        ctx.stroke();
+      }
+
+      // Eixos centrais
+      ctx.strokeStyle = 'rgba(114,246,220,.16)';
+      ctx.beginPath();
+      ctx.moveTo(width * 0.5, 20);
+      ctx.lineTo(width * 0.5, height - 20);
+      ctx.moveTo(20, height * 0.5);
+      ctx.lineTo(width - 20, height * 0.5);
+      ctx.stroke();
+
+      // Nós do pipeline
+      const nodes = [
+        { x: width * 0.13, y: height * 0.62, label: 'EVENT', active: flow.event !== '—' },
+        { x: width * 0.31, y: height * 0.39, label: 'FUNCTION', active: flow.function !== '—' },
+        { x: width * 0.50, y: height * 0.62, label: 'STATE', active: flow.state !== '—' },
+        { x: width * 0.69, y: height * 0.39, label: 'DOM', active: flow.dom !== '—' },
+        { x: width * 0.87, y: height * 0.62, label: 'RESULT', active: flow.result !== '—' }
+      ];
+
+      ctx.setLineDash([5, 7]);
+      ctx.strokeStyle = 'rgba(139,200,255,.27)';
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < nodes.length - 1; i += 1) {
+        ctx.beginPath();
+        ctx.moveTo(nodes[i].x, nodes[i].y);
+        ctx.lineTo(nodes[i + 1].x, nodes[i + 1].y);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      nodes.forEach((node, index) => {
+        const radius = 11 + (node.active ? 4 : 0) + (reduced ? 0 : eventPulse * 3);
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, radius + 8, 0, Math.PI * 2);
+        ctx.strokeStyle = index % 2 === 0
+          ? 'rgba(114,246,220,.10)'
+          : 'rgba(139,200,255,.10)';
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = node.active
+          ? 'rgba(114,246,220,.82)'
+          : 'rgba(139,200,255,.22)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(240,250,255,.92)';
+        ctx.fill();
+
+        ctx.font = '700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+        ctx.fillStyle = 'rgba(220,239,255,.76)';
+        ctx.textAlign = 'center';
+        ctx.fillText(node.label, node.x, node.y + 30);
+      });
+
+      // Painel de telemetria
+      ctx.textAlign = 'left';
+      ctx.font = '700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+      ctx.fillStyle = 'rgba(220,239,255,.68)';
+      const telemetry = [
+        `PHASE  ${String(phase).toUpperCase()}`,
+        `EVENTS ${this.logger.eventCount}`,
+        `MUT    ${this.logger.mutationCount}`,
+        `TIME   ${stability.toFixed(0)}%`
+      ];
+      telemetry.forEach((line, index) => {
+        ctx.fillText(line, 16, 18 + index * 15);
+      });
+
+      // Indicador de execução
+      const barW = Math.min(250, width * 0.27);
+      const barX = width - barW - 18;
+      const barY = 16;
+      ctx.strokeStyle = 'rgba(139,200,255,.22)';
+      ctx.strokeRect(barX, barY, barW, 7);
+      ctx.fillStyle = 'rgba(114,246,220,.52)';
+      ctx.fillRect(barX, barY, barW * (0.15 + stability / 120), 7);
+
+      // Pequeno “scanner” animado sem criar setInterval adicional.
+      if (!reduced) {
+        const t = performance.now() * 0.00045;
+        const scanX = ((Math.sin(t) + 1) / 2) * width;
+        ctx.strokeStyle = 'rgba(114,246,220,.18)';
+        ctx.beginPath();
+        ctx.moveTo(scanX, 0);
+        ctx.lineTo(scanX, height);
+        ctx.stroke();
+      }
+    }
+  }
+
+  /* ========================================================================
+     GAME CONTROLLER — ORQUESTRAÇÃO
+     ======================================================================== */
+
+  class GameController {
+    constructor() {
+      this.logger = new GameLogger();
+      this.bus = new EventBus(this.logger);
+      this.state = new StateManager(this.bus, this.logger);
+      this.audio = new AudioManager(this.state, this.logger);
+      this.ui = new UIManager(this.state, this.bus, this.logger, this.audio);
+      this.missions = new MissionManager(this.state, this.bus, this.ui.notify);
+      this.codex = new CodexManager(this.state, this.bus, this.ui.notify);
+      this.save = new SaveManager(this.state, this.bus, this.logger, this.ui.notify);
+      this.settings = new SettingsManager(this.state, this.bus, this.ui, this.logger);
+      this.narrative = new NarrativeEngine(
+        this.state,
+        this.bus,
+        this.ui,
+        this.logger,
+        this.audio,
+        this.missions,
+        this.codex
+      );
+      this.particles = new ParticleSystem(this.state);
+      this.visualLab = new VisualLab(this.state, this.bus, this.logger, this.ui);
+
+      this.started = false;
+      this.playTimer = null;
+      this.lastTick = 0;
+      this.autoSaveSources = new Set([
+        'narrative.goto',
+        'narrative.seen',
+        'narrative.location',
+        'choice.',
+        'mission.',
+        'codex.',
+        'inspect',
+        'settings.change'
+      ]);
+    }
+
+    init() {
+      if (this.started) return;
+      this.started = true;
+      window.game = this;
+
+      this.settings.load();
+      this.bindSystemEvents();
+      this.ui.initBindings(this);
+      this.ui.render();
+      this.narrative.renderCinematic();
+      this.visualLab.init();
+      this.particles.start();
+      this.startPlayClock();
+
+      if (this.save.hasSave()) {
+        this.ui.notify(
+          'Crônica encontrada',
+          'Um progresso local está disponível para continuar.',
+          'info'
+        );
+      }
+
+      this.logger.info('Sistema inicializado', `JESUS CHRONICLES ${VERSION}`);
+      this.visualLab.refresh();
+    }
+
+    bindSystemEvents() {
+      this.bus.on('state:changed', ({ source }) => {
+        try {
+          this.ui.render();
+          this.visualLab.refresh();
+          if (this.shouldAutosave(source)) {
+            this.save.schedule();
+          }
+        } catch (error) {
+          this.logger.error('Falha no render central', error);
+        }
+      });
+
+      [
+        'state:reset',
+        'scene:changed',
+        'screen:changed',
+        'choice:selected',
+        'mission:updated',
+        'codex:updated',
+        'save:completed',
+        'save:loaded',
+        'save:deleted',
+        'settings:changed',
+        'overlay:opened',
+        'overlay:closed'
+      ].forEach((eventName) => {
+        this.bus.on(eventName, () => this.visualLab.refresh());
+      });
+
+      window.addEventListener('error', (event) => {
+        this.logger.error('Erro global de JavaScript', event.error || event.message);
+        this.visualLab.refresh();
+      });
+
+      window.addEventListener('unhandledrejection', (event) => {
+        this.logger.error('Promise rejeitada', event.reason);
+        this.visualLab.refresh();
+      });
+    }
+
+    shouldAutosave(source = '') {
+      if (this.state.get('phase') === 'title') return false;
+      if (!source) return true;
+      if (String(source).startsWith('save')) return false;
+      if (String(source).startsWith('autosave')) return false;
+      if (String(source) === 'clock.tick') return false;
+      return true;
+    }
+
+    startPlayClock() {
+      clearInterval(this.playTimer);
+      this.lastTick = performance.now();
+      this.playTimer = setInterval(() => {
+        if (this.state.get('phase') !== 'game') {
+          this.lastTick = performance.now();
+          return;
+        }
+        const now = performance.now();
+        const delta = Math.max(0, Math.min(5000, now - this.lastTick));
+        this.lastTick = now;
+        this.state.set(
+          'meta.playSeconds',
+          (Number(this.state.get('meta.playSeconds')) || 0) + delta / 1000,
+          'clock.tick'
+        );
+      }, 1000);
+    }
+
+    startNewGame() {
+      this.audio.click();
+      clearTimeout(this.narrative.timer);
+      this.narrative.typing = false;
+
+      this.state.reset(true);
+      this.state.set('meta.createdAt', nowISO(), 'newGame');
+      this.state.set('narrative.cinematicIndex', 0, 'newGame');
+      this.state.set('narrative.currentScene', 'g_intro', 'newGame');
+      this.state.set('phase', 'cinematic', 'newGame');
+
+      this.ui.transition(() => {
+        this.ui.showScreen('screenCinematic');
+        this.narrative.renderCinematic();
+      });
+
+      this.logger.info('Nova crônica iniciada');
+      this.visualLab.refresh();
+    }
+
+    continueGame() {
+      return this.loadSavedGame();
+    }
+
+    loadSavedGame() {
+      const ok = this.save.load();
+      if (!ok) {
+        this.ui.render();
+        return false;
+      }
+
+      const phase = this.state.get('phase');
+      this.ui.transition(() => {
+        if (phase === 'title') {
+          this.ui.showScreen('screenCinematic');
+          this.narrative.renderCinematic();
+        } else if (phase === 'cinematic') {
+          this.ui.showScreen('screenCinematic');
+          this.narrative.renderCinematic();
+        } else {
+          this.ui.showScreen('screenGame');
+          this.narrative.goto(
+            this.state.get('narrative.currentScene') || 'g_intro'
+          );
+        }
+      });
+
+      this.logger.info('Save carregado');
+      return true;
+    }
+
+    restartToTitle() {
+      clearTimeout(this.narrative.timer);
+      this.narrative.typing = false;
+      this.ui.closeTopOverlay();
+      this.ui.transition(() => this.ui.showScreen('screenTitle'));
+      this.logger.info('Retorno ao título sem apagar save');
+      this.visualLab.refresh();
+    }
+
+    deleteSaveWithConfirm() {
+      const confirmed = window.confirm(
+        'Apagar o save local desta crônica? Esta ação não pode ser desfeita neste navegador.'
+      );
+      if (!confirmed) return false;
+      const ok = this.save.delete();
+      this.ui.render();
+      return ok;
+    }
+
+    inspect() {
+      if (this.state.get('phase') !== 'game') return;
+      this.audio.click();
+      this.state.increment('world.inspectCount', 1, 'inspect');
+      this.state.increment('statistics.inspections', 1, 'inspect');
+      this.missions.progress('intro', 1);
+
+      const locationId = this.state.get('world.location');
+      const location = LOCATIONS[locationId] || LOCATIONS.mega_city;
+      const messages = {
+        mega_city: 'Sinais civis ainda funcionam em intervalos. Há zonas onde a população resiste fora dos protocolos.',
+        chrono_lab: 'O núcleo temporal apresenta microvariações incompatíveis com a previsão oficial.',
+        archive: 'Os registros ocultos possuem lacunas deliberadas. Alguém decidiu quais partes da história deveriam sobreviver.',
+        transit: 'A passagem não é um corredor: é uma sobreposição de possibilidades. Cada segundo parece pertencer a mais de um lugar.',
+        galilee: 'Antes de interferir, observe. Pessoas reais não sabem que você veio de uma era diferente.'
+      };
+
+      this.ui.notify(
+        `LEITURA // ${location.name.toUpperCase()}`,
+        messages[locationId] || 'Nenhum dado adicional disponível.',
+        'info'
+      );
+      this.bus.emit('world:inspected', { location: locationId });
+    }
+
+    activateSystemTab(tabId) {
+      const allowed = new Set(['missionTab', 'timelineTab', 'codexTab']);
+      const target = allowed.has(tabId) ? tabId : 'missionTab';
+      qsa('.system-tab').forEach((button) => {
+        const active = button.dataset.tab === target;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-selected', String(active));
+      });
+      qsa('.system-tab-content').forEach((panel) => {
+        panel.classList.toggle('active', panel.id === target);
+      });
+      this.audio.click();
+      this.bus.emit('system:tabChanged', { id: target });
+      this.visualLab.refresh();
+    }
+
+    selectChoiceByIndex(index) {
+      const choices = this.narrative.availableChoices(this.narrative.current);
+      const choice = choices[index];
+      if (!choice) return false;
+      this.narrative.selectChoice(choice);
+      return true;
+    }
+
+    handleKey(event) {
+      if (!event) return;
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        this.save.save();
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        if (this.ui.closeTopOverlay()) {
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (this.state.get('phase') !== 'game') {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          if (this.state.get('phase') === 'cinematic') {
+            this.narrative.nextCinematic();
+          }
+        }
+        return;
+      }
+
+      if (event.key.toLowerCase() === 'e') {
+        event.preventDefault();
+        this.inspect();
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        this.narrative.continue();
+        return;
+      }
+
+      if (/^[1-9]$/.test(event.key)) {
+        event.preventDefault();
+        this.selectChoiceByIndex(Number(event.key) - 1);
+      }
+    }
+  }
+
+  /* ========================================================================
+     BOOT ROBUSTO
+     ======================================================================== */
+
+  const boot = () => {
+    try {
+      const game = new GameController();
+      game.init();
+      window.game = game;
+      document.documentElement.dataset.jcBoot = 'ok';
+    } catch (error) {
+      console.error('[JC] Falha crítica na inicialização', error);
+      document.documentElement.dataset.jcBoot = 'error';
+
+      const stack = document.getElementById('notificationStack');
+      if (stack) {
+        const item = document.createElement('div');
+        item.className = 'notification notification-error show';
+        item.innerHTML = '<strong>Falha ao iniciar</strong><span>O sistema detectou um erro na inicialização. Verifique o console do navegador.</span>';
+        stack.appendChild(item);
+      }
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+})();

@@ -7246,3 +7246,73 @@ body.reduced-motion *::after {
   }
 
 }
+
+
+/* ========================================================================
+   JC STABILITY / UX ENHANCEMENT LAYER
+   ======================================================================== */
+
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+}
+
+.choice-button:focus-visible,
+.system-tab:focus-visible,
+.menu-card:focus-visible,
+.save-slot:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 3px;
+}
+
+.screen-game {
+  overflow: hidden;
+}
+
+.dialogue-panel {
+  contain: layout paint style;
+}
+
+.choice-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.choice-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(139,200,255,.09), transparent);
+  transform: translateX(-120%);
+  transition: transform .45s ease;
+  pointer-events: none;
+}
+
+.choice-button:hover::after,
+.choice-button:focus-visible::after {
+  transform: translateX(120%);
+}
+
+.overlay[hidden] {
+  display: none !important;
+}
+
+.visual-lab-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}
