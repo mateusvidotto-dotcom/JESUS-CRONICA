@@ -1,82 +1,111 @@
 /* ==========================================================================
    JESUS CHRONICLES
-   CORE ENGINE
+   PROLOGUE MODULE
    ==========================================================================
-   Versão: 1.1.0
+   MÓDULO COMPLETO DO PRÓLOGO
 
-   Arquitetura:
-   - EventBus
-   - GameLogger
-   - StateManager
-   - AudioManager
-   - SaveManager
-   - MissionManager
-   - CodexManager
-   - UIManager
-   - NarrativeEngine
-   - SettingsManager
-   - ParticleSystem
-   - VisualLab
-   - GameController
+   Este arquivo NÃO substitui:
+   - app.js
+   - app.continuation.js
 
-   Objetivos:
-   - Inicialização segura
-   - Sistema narrativo robusto
-   - Escolhas realmente funcionais
-   - Consequências persistentes
-   - Salvamento local
-   - Autosave
-   - Missões
-   - Códex
-   - HUD
-   - Teclado
-   - Laboratório visual
-   - Diagnóstico
-   - Proteção contra duplo clique
-   - Proteção contra cenas inconsistentes
-   - Preservação das estruturas existentes
+   Este arquivo COMPLEMENTA os dois.
+
+   RESPONSABILIDADES:
+   - reconstruir o fluxo do Prólogo;
+   - separar Prólogo de Ato I;
+   - criar exploração contextual;
+   - criar pontos de interesse;
+   - registrar observações;
+   - registrar decisões;
+   - criar consequências;
+   - controlar estado;
+   - controlar tutorial;
+   - preparar Ato I;
+   - preservar save;
+   - preservar HUD;
+   - preservar Campaign Engine.
+
+   IMPORTANTE:
+
+   O PRÓLOGO NÃO DEVE CONSUMIR O ATO II/ATO III.
+
+   O salto temporal continua sendo um conteúdo posterior.
+
+   Aqui o jogador ainda está no futuro.
    ========================================================================== */
 
 (() => {
   'use strict';
 
-  /* ==========================================================================
-     CONFIGURAÇÃO GLOBAL
-     ========================================================================== */
+  /* =========================================================================
+     ESPERA PELO MOTOR PRINCIPAL
+     ========================================================================= */
 
-  const VERSION = '1.1.0';
+  const waitForGame = (
+    callback,
+    attempt = 0
+  ) => {
+    if (
+      window.game &&
+      window.game.state &&
+      window.game.narrative &&
+      window.game.ui
+    ) {
+      callback(
+        window.game
+      );
 
-  const SAVE_KEY =
-    'jesus-chronicles:save:v1';
+      return;
+    }
 
-  const SETTINGS_KEY =
-    'jesus-chronicles:settings:v1';
+    if (
+      attempt >=
+      120
+    ) {
+      console.error(
+        '[JC PROLOGUE] Motor principal não encontrado.'
+      );
 
-  const AUTOSAVE_DELAY =
-    700;
+      return;
+    }
 
-  const PLAY_CLOCK_INTERVAL =
-    1000;
+    setTimeout(
+      () =>
+        waitForGame(
+          callback,
+          attempt + 1
+        ),
+      100
+    );
+  };
 
-  const MIN_STAT =
-    0;
-
-  const MAX_STAT =
-    100;
-
-  /* ==========================================================================
+  /* =========================================================================
      UTILITÁRIOS
-     ========================================================================== */
+     ========================================================================= */
+
+  const safe = (
+    value
+  ) =>
+    String(
+      value ??
+        ''
+    );
 
   const clamp = (
     value,
-    min = MIN_STAT,
-    max = MAX_STAT
+    min = 0,
+    max = 100
   ) => {
-    const numeric =
-      Number(value);
+    const number =
+      Number(
+        value
+      );
 
-    if (!Number.isFinite(numeric)) {
+    if (
+      !Number.isFinite(
+        number
+      )
+    ) {
       return min;
     }
 
@@ -84,47 +113,16 @@
       max,
       Math.max(
         min,
-        numeric
+        number
       )
     );
   };
-
-  const safeText = (
-    value
-  ) => String(
-    value ?? ''
-  );
-
-  const deepClone = (
-    value
-  ) => {
-    try {
-      return JSON.parse(
-        JSON.stringify(
-          value
-        )
-      );
-    } catch {
-      return value;
-    }
-  };
-
-  const nowISO = () =>
-    new Date().toISOString();
 
   const byId = (
     id
   ) =>
     document.getElementById(
       id
-    );
-
-  const qs = (
-    selector,
-    root = document
-  ) =>
-    root.querySelector(
-      selector
     );
 
   const qsa = (
@@ -137,1758 +135,453 @@
       )
     ];
 
-  const isObject = (
-    value
-  ) =>
-    value !== null &&
-    typeof value === 'object' &&
-    !Array.isArray(
-      value
-    );
-
-  const escapeHTML = (
-    value
-  ) =>
-    safeText(value)
-      .replace(
-        /&/g,
-        '&amp;'
-      )
-      .replace(
-        /</g,
-        '&lt;'
-      )
-      .replace(
-        />/g,
-        '&gt;'
-      )
-      .replace(
-        /"/g,
-        '&quot;'
-      )
-      .replace(
-        /'/g,
-        '&#039;'
+  const create = (
+    tag,
+    className = '',
+    text = ''
+  ) => {
+    const node =
+      document.createElement(
+        tag
       );
 
-  const formatDate = (
-    iso
-  ) => {
-    if (!iso) {
-      return 'Nenhum registro';
+    if (
+      className
+    ) {
+      node.className =
+        className;
     }
 
-    try {
-      return new Intl.DateTimeFormat(
-        'pt-BR',
-        {
-          dateStyle:
-            'short',
+    if (
+      text
+    ) {
+      node.textContent =
+        text;
+    }
 
-          timeStyle:
-            'short'
+    return node;
+  };
+
+  /* =========================================================================
+     IDENTIDADE DO PRÓLOGO
+     ========================================================================= */
+
+  const PROLOGUE_ID =
+    'prologue';
+
+  const PROLOGUE_ACT_NUMBER =
+    0;
+
+  const ACT_I_ID =
+    'act1';
+
+  /* =========================================================================
+     PONTOS DE EXPLORAÇÃO
+     ========================================================================= */
+
+  const PROLOGUE_POIS = {
+
+    city_horizon: {
+      id:
+        'city_horizon',
+
+      title:
+        'Horizonte da Megacidade',
+
+      short:
+        'Observar a cidade a partir da zona elevada.',
+
+      description:
+        'Torres reconstruídas, ruínas antigas, barreiras energéticas e bairros inteiros separados por níveis de acesso revelam um futuro que não caiu completamente — apenas deixou de pertencer igualmente a todos.',
+
+      consequence: {
+        stats: {
+          hope:
+            2,
+
+          freedom:
+            2
+        },
+
+        flags: {
+          sawSocialDivide:
+            true
         }
-      ).format(
-        new Date(
-          iso
-        )
-      );
-    } catch {
-      return 'Registro existente';
+      },
+
+      discovery:
+        'city_social_divide'
+    },
+
+    civilian_zone: {
+      id:
+        'civilian_zone',
+
+      title:
+        'Zona Civil',
+
+      short:
+        'Observar a população protegida pelos protocolos.',
+
+      description:
+        'Pessoas esperam por racionamento, drones verificam permissões e telas públicas repetem mensagens sobre segurança. Um menino olha para o céu sempre que um drone passa.',
+
+      consequence: {
+        stats: {
+          hope:
+            3,
+
+          guilt:
+            1
+        },
+
+        flags: {
+          witnessedCivilianLife:
+            true
+        }
+      },
+
+      discovery:
+        'controlled_population'
+    },
+
+    abandoned_sector: {
+      id:
+        'abandoned_sector',
+
+      title:
+        'Setor Abandonado',
+
+      short:
+        'Investigar uma região fora das barreiras.',
+
+      description:
+        'A cidade termina abruptamente. Estruturas quebradas são cobertas por vegetação contaminada e sinais antigos de evacuação. No interior de uma parede caída existe um símbolo técnico que você não reconhece.',
+
+      consequence: {
+        stats: {
+          freedom:
+            3,
+
+          hope:
+            -1
+        },
+
+        flags: {
+          sawAbandonedSector:
+            true
+        }
+      },
+
+      discovery:
+        'unknown_symbol'
+    },
+
+    resistance_signal: {
+      id:
+        'resistance_signal',
+
+      title:
+        'Sinal Interrompido',
+
+      short:
+        'Detectar uma transmissão clandestina.',
+
+      description:
+        'Entre frequências militares e propaganda oficial existe um sinal breve. Alguém está tentando transmitir uma mensagem fora dos canais autorizados. O conteúdo é incompleto.',
+
+      consequence: {
+        stats: {
+          freedom:
+            4,
+
+          control:
+            -2
+        },
+
+        flags: {
+          heardIllegalSignal:
+            true
+        }
+      },
+
+      discovery:
+        'illegal_signal'
+    },
+
+    cronos_gate: {
+      id:
+        'cronos_gate',
+
+      title:
+        'Entrada do Complexo Cronos',
+
+      short:
+        'Observar a instalação que mudará sua vida.',
+
+      description:
+        'A instalação parece mais antiga do que os documentos oficiais indicam. Camadas de segurança modernas escondem estruturas muito anteriores ao projeto anunciado.',
+
+      consequence: {
+        stats: {
+          control:
+            2
+        },
+
+        flags: {
+          inspectedCronosExterior:
+            true
+        }
+      },
+
+      discovery:
+        'cronos_anomaly'
     }
   };
 
-  /* ==========================================================================
-     EVENT BUS
-     ========================================================================== */
+  /* =========================================================================
+     ESTADO EXTRA DO PRÓLOGO
+     ========================================================================= */
 
-  class EventBus {
-    constructor(
-      logger
-    ) {
-      this.logger =
-        logger;
+  const ensurePrologueState = (
+    game
+  ) => {
+    const state =
+      game.state;
 
-      this.events =
-        new Map();
-    }
-
-    on(
-      name,
-      callback
-    ) {
-      if (
-        !this.events.has(
-          name
-        )
-      ) {
-        this.events.set(
-          name,
-          new Set()
-        );
-      }
-
-      this.events
-        .get(name)
-        .add(
-          callback
-        );
-
-      return () =>
-        this.off(
-          name,
-          callback
-        );
-    }
-
-    off(
-      name,
-      callback
-    ) {
-      this.events
-        .get(name)
-        ?.delete(
-          callback
-        );
-    }
-
-    emit(
-      name,
-      payload
-    ) {
-      this.logger?.trackEvent(
-        name,
-        payload
+    const existing =
+      state.get(
+        'prologue'
       );
 
-      const listeners =
-        this.events.get(
-          name
-        );
-
-      if (!listeners) {
-        return;
-      }
-
-      for (
-        const callback
-        of [
-          ...listeners
-        ]
-      ) {
-        try {
-          callback(
-            payload
-          );
-        } catch (
-          error
-        ) {
-          this.logger?.error(
-            `Erro no evento ${name}`,
-            error
-          );
-        }
-      }
-    }
-  }
-
-  /* ==========================================================================
-     LOGGER
-     ========================================================================== */
-
-  class GameLogger {
-    constructor() {
-      this.entries = [];
-
-      this.maxEntries =
-        250;
-
-      this.eventCount =
-        0;
-
-      this.mutationCount =
-        0;
-
-      this.observerCount =
-        0;
-
-      this.lastFlow = {
-        event:
-          '—',
-
-        function:
-          '—',
-
-        state:
-          '—',
-
-        dom:
-          '—',
-
-        result:
-          '—'
-      };
-    }
-
-    push(
-      level,
-      message,
-      detail = ''
+    if (
+      existing
     ) {
-      this.entries.push({
-        time:
-          new Date()
-            .toLocaleTimeString(
-              'pt-BR'
-            ),
+      return;
+    }
 
-        level,
+    state.set(
+      'prologue',
+      {
+        active:
+          true,
 
-        message:
-          safeText(
-            message
-          ),
+        completed:
+          false,
 
-        detail:
-          safeText(
-            detail
-          )
-      });
-
-      if (
-        this.entries.length >
-        this.maxEntries
-      ) {
-        this.entries.splice(
+        tutorialStep:
           0,
-          this.entries.length -
-            this.maxEntries
-        );
-      }
 
-      if (
-        level ===
-        'error'
-      ) {
-        console.error(
-          '[JC]',
-          message,
-          detail
-        );
-      } else if (
-        level ===
-        'warn'
-      ) {
-        console.warn(
-          '[JC]',
-          message,
-          detail
-        );
-      } else {
-        console.info(
-          '[JC]',
-          message,
-          detail
-        );
-      }
-    }
+        explorationUnlocked:
+          false,
 
-    info(
-      message,
-      detail = ''
+        explorationComplete:
+          false,
+
+        objective:
+          'Entender por que você foi escolhido.',
+
+        visitedPOIs:
+          [],
+
+        discoveries:
+          [],
+
+        investigations:
+          [],
+
+        choices:
+          [],
+
+        briefingComplete:
+          false,
+
+        missionAccepted:
+          false,
+
+        missionQuestioned:
+          false,
+
+        missionRefused:
+          false,
+
+        civilianContact:
+          false,
+
+        cityObserved:
+          false,
+
+        cronosObserved:
+          false,
+
+        finalDecision:
+          null,
+
+        transitionReady:
+          false
+      },
+      'prologue.initialize'
+    );
+
+    /*
+     * Variáveis que serão úteis posteriormente.
+     *
+     * Não interferem no sistema existente.
+     */
+    const campaign =
+      state.get(
+        'campaign'
+      );
+
+    if (
+      campaign
     ) {
-      this.push(
-        'info',
-        message,
-        detail
+      state.patch(
+        'campaign',
+        {
+          prologue: {
+            completed:
+              false,
+
+            discoveries:
+              [],
+
+            decisions:
+              [],
+
+            exploration:
+              []
+          }
+        },
+        'prologue.campaign.initialize'
       );
     }
+  };
 
-    warn(
-      message,
-      detail = ''
-    ) {
-      this.push(
-        'warn',
-        message,
-        detail
-      );
-    }
+  /* =========================================================================
+     CENAS DO PRÓLOGO
+     ========================================================================= */
 
-    error(
-      message,
-      error
-    ) {
-      this.push(
-        'error',
-        message,
-        error?.stack ||
-          error?.message ||
-          error
-      );
-    }
+  const PROLOGUE_SCENES = {
 
-    trackEvent(
-      name,
-      payload
-    ) {
-      this.eventCount += 1;
+    p00_operation: {
+      id:
+        'p00_operation',
 
-      this.lastFlow.event =
-        safeText(
-          name
-        );
-
-      this.lastFlow.result =
-        payload?.id ||
-        payload?.source ||
-        'ok';
-    }
-
-    mutation(
-      path,
-      source
-    ) {
-      this.mutationCount += 1;
-
-      this.lastFlow.function =
-        source ||
-        'state.patch';
-
-      this.lastFlow.state =
-        path;
-
-      this.lastFlow.dom =
-        'render';
-    }
-
-    latest(
-      count = 10
-    ) {
-      return this.entries.slice(
-        -count
-      );
-    }
-
-    clear() {
-      this.entries =
-        [];
-    }
-  }
-
-  /* ==========================================================================
-     ESTADO PADRÃO
-     ========================================================================== */
-
-  const DEFAULT_STATE = {
-    version:
-      VERSION,
-
-    phase:
-      'title',
-
-    meta: {
-      createdAt:
-        null,
-
-      updatedAt:
-        null,
-
-      playSeconds:
-        0,
-
-      lastAutosave:
-        null
-    },
-
-    player: {
-      name:
-        'O PROTAGONISTA',
+      speaker:
+        'PROTOCOLO CRONOLÓGICO',
 
       role:
-        'Viajante temporal',
+        'REGISTRO DE OPERAÇÃO',
 
-      portrait:
-        '01',
+      type:
+        'ABERTURA',
 
-      stats: {
-        hope:
-          45,
+      location:
+        'mega_city',
 
-        freedom:
-          40,
+      text:
+        'A operação começou antes do amanhecer. Uma zona de conflito havia sido isolada depois de mais uma noite de confrontos. Você não sabia quem estava vencendo — apenas que havia pessoas tentando sobreviver entre destroços, drones e barreiras energéticas.',
 
-        control:
-          55,
+      next:
+        'p01_rescue'
+    },
 
-        temporal:
-          100
-      },
+    p01_rescue: {
+      id:
+        'p01_rescue',
 
-      abilities: [
+      speaker:
+        'AGENTE DESCONHECIDO',
+
+      role:
+        'UNIDADE DE EXTRAÇÃO',
+
+      type:
+        'CINEMÁTICA',
+
+      location:
+        'mega_city',
+
+      text:
+        '“Você vem conosco.” A mão enluvada se estende. Atrás dela, uma aeronave silenciosa paira sobre a rua destruída. Você ainda não sabe por quê, mas alguém decidiu que sua sobrevivência importa.',
+
+      choices: [
         {
           id:
-            'observe',
+            'accept_extraction',
 
-          name:
-            'Leitura de contexto',
+          text:
+            'Aceitar a extração.',
 
-          description:
-            'Percebe detalhes históricos e sociais.',
+          effects: {
+            hope:
+              2
+          },
 
-          unlocked:
-            true
+          flags: {
+            acceptedExtraction:
+              true
+          },
+
+          next:
+            'p02_arrival'
         },
 
         {
           id:
-            'anchor',
+            'ask_reason',
 
-          name:
-            'Âncora temporal',
+          text:
+            '“Quem mandou vocês?”',
 
-          description:
-            'Reduz instabilidade após decisões críticas.',
+          effects: {
+            freedom:
+              2,
 
-          unlocked:
-            true
+            control:
+              -1
+          },
+
+          flags: {
+            askedExtractionReason:
+              true
+          },
+
+          next:
+            'p02_arrival'
         },
 
         {
           id:
-            'empathy',
+            'refuse_extraction',
 
-          name:
-            'Escuta ativa',
+          text:
+            'Recusar e tentar permanecer na zona.',
 
-          description:
-            'Abre opções de diálogo baseadas em esperança.',
+          effects: {
+            control:
+              3,
 
-          unlocked:
-            false
+            hope:
+              -2
+          },
+
+          flags: {
+            resistedExtraction:
+              true
+          },
+
+          next:
+            'p02_arrival'
         }
       ]
     },
 
-    world: {
-      location:
-        'mega_city',
+    p02_arrival: {
+      id:
+        'p02_arrival',
 
-      discovered: [
-        'mega_city'
-      ],
-
-      visited: [
-        'mega_city'
-      ],
-
-      inspectCount:
-        0,
-
-      era:
-        'FUTURO',
-
-      act:
-        'PRÓLOGO'
-    },
-
-    narrative: {
-      cinematicIndex:
-        0,
-
-      currentScene:
-        'g_intro',
-
-      act:
-        1,
-
-      flags:
-        {},
-
-      choices:
-        [],
-
-      seenScenes:
-        [],
-
-      ending:
-        null
-    },
-
-    missions: {
-      intro: {
-        id:
-          'intro',
-
-        title:
-          'Entenda a missão',
-
-        description:
-          'Investigue a instalação e descubra por que você foi escolhido.',
-
-        status:
-          'active',
-
-        progress:
-          0,
-
-        goal:
-          2
-      },
-
-      responsibility: {
-        id:
-          'responsibility',
-
-        title:
-          'O peso da escolha',
-
-        description:
-          'Tome decisões sem transferir toda a responsabilidade para o passado.',
-
-        status:
-          'locked',
-
-        progress:
-          0,
-
-        goal:
-          3
-      },
-
-      truth: {
-        id:
-          'truth',
-
-        title:
-          'O que realmente aconteceu',
-
-        description:
-          'Reconstrua o motivo da crise temporal.',
-
-        status:
-          'locked',
-
-        progress:
-          0,
-
-        goal:
-          3
-      }
-    },
-
-    codex: {
-      future: {
-        id:
-          'future',
-
-        title:
-          'O Futuro',
-
-        category:
-          'Mundo',
-
-        text:
-          'Uma civilização tecnicamente avançada que normalizou crises permanentes.',
-
-        unlocked:
-          true
-      },
-
-      project: {
-        id:
-          'project',
-
-        title:
-          'Projeto Cronos',
-
-        category:
-          'Organização',
-
-        text:
-          'Programa experimental de deslocamento temporal.',
-
-        unlocked:
-          false
-      },
-
-      paradox: {
-        id:
-          'paradox',
-
-        title:
-          'Paradoxo de Responsabilidade',
-
-        category:
-          'Teoria',
-
-        text:
-          'Quanto mais o presente tenta terceirizar suas escolhas, mais instável se torna a linha temporal.',
-
-        unlocked:
-          false
-      },
-
-      archive: {
-        id:
-          'archive',
-
-        title:
-          'Arquivo de Ruptura',
-
-        category:
-          'História',
-
-        text:
-          'Registros censurados sobre a origem da crise global.',
-
-        unlocked:
-          false
-      }
-    },
-
-    settings: {
-      fastText:
-        false,
-
-      highContrast:
-        false,
-
-      reducedMotion:
-        false,
-
-      audio:
-        true
-    },
-
-    statistics: {
-      choices:
-        0,
-
-      dialogues:
-        0,
-
-      inspections:
-        0,
-
-      saves:
-        0,
-
-      sceneChanges:
-        0
-    }
-  };
-
-  /* ==========================================================================
-     STATE MANAGER
-     ========================================================================== */
-
-  class StateManager {
-    constructor(
-      bus,
-      logger
-    ) {
-      this.bus =
-        bus;
-
-      this.logger =
-        logger;
-
-      this.state =
-        deepClone(
-          DEFAULT_STATE
-        );
-
-      this.silentDepth =
-        0;
-    }
-
-    snapshot() {
-      return deepClone(
-        this.state
-      );
-    }
-
-    get(
-      path = ''
-    ) {
-      if (!path) {
-        return this.state;
-      }
-
-      return path
-        .split('.')
-        .reduce(
-          (
-            current,
-            key
-          ) =>
-            current?.[
-              key
-            ],
-          this.state
-        );
-    }
-
-    reset(
-      preserveSettings = true
-    ) {
-      const settings =
-        preserveSettings
-          ? deepClone(
-              this.state.settings
-            )
-          : deepClone(
-              DEFAULT_STATE.settings
-            );
-
-      this.state =
-        deepClone(
-          DEFAULT_STATE
-        );
-
-      this.state.settings =
-        settings;
-
-      this.state.meta.createdAt =
-        nowISO();
-
-      this.state.meta.updatedAt =
-        nowISO();
-
-      this.emitChange(
-        'state:reset',
-        {
-          path:
-            '*',
-
-          source:
-            'state.reset'
-        }
-      );
-
-      return this.state;
-    }
-
-    replace(
-      next,
-      source = 'load'
-    ) {
-      this.state =
-        this.sanitize(
-          next
-        );
-
-      this.logger.mutation(
-        '*',
-        source
-      );
-
-      this.emitChange(
-        'state:changed',
-        {
-          path:
-            '*',
-
-          source,
-
-          state:
-            this.snapshot()
-        }
-      );
-    }
-
-    set(
-      path,
-      value,
-      source = 'unknown'
-    ) {
-      if (!path) {
-        return;
-      }
-
-      const keys =
-        path.split('.');
-
-      let cursor =
-        this.state;
-
-      for (
-        let i = 0;
-        i <
-        keys.length - 1;
-        i += 1
-      ) {
-        const key =
-          keys[i];
-
-        if (
-          !cursor[key] ||
-          typeof cursor[key] !==
-            'object'
-        ) {
-          cursor[key] =
-            {};
-        }
-
-        cursor =
-          cursor[key];
-      }
-
-      const last =
-        keys[
-          keys.length - 1
-        ];
-
-      const before =
-        deepClone(
-          cursor[last]
-        );
-
-      cursor[last] =
-        value;
-
-      this.state.meta.updatedAt =
-        nowISO();
-
-      this.logger.mutation(
-        path,
-        source
-      );
-
-      if (
-        this.silentDepth ===
-        0
-      ) {
-        this.emitChange(
-          'state:changed',
-          {
-            path,
-
-            before,
-
-            value:
-              deepClone(
-                value
-              ),
-
-            source
-          }
-        );
-      }
-    }
-
-    patch(
-      path,
-      partial,
-      source = 'unknown'
-    ) {
-      const base =
-        this.get(
-          path
-        );
-
-      this.set(
-        path,
-        {
-          ...(isObject(
-            base
-          )
-            ? base
-            : {}),
-
-          ...partial
-        },
-        source
-      );
-    }
-
-    increment(
-      path,
-      amount = 1,
-      source = 'increment'
-    ) {
-      const current =
-        Number(
-          this.get(
-            path
-          )
-        ) || 0;
-
-      this.set(
-        path,
-        current +
-          amount,
-        source
-      );
-    }
-
-    adjustStat(
-      key,
-      amount,
-      source = 'narrative'
-    ) {
-      const allowed =
-        new Set([
-          'hope',
-          'freedom',
-          'control',
-          'temporal'
-        ]);
-
-      if (
-        !allowed.has(
-          key
-        )
-      ) {
-        return;
-      }
-
-      const path =
-        `player.stats.${key}`;
-
-      const current =
-        Number(
-          this.get(
-            path
-          )
-        ) || 0;
-
-      this.set(
-        path,
-
-        clamp(
-          current +
-            Number(
-              amount
-            )
-        ),
-
-        source
-      );
-    }
-
-    batch(
-      callback,
-      source = 'batch'
-    ) {
-      this.silentDepth +=
-        1;
-
-      try {
-        callback();
-      } finally {
-        this.silentDepth -=
-          1;
-      }
-
-      this.state.meta.updatedAt =
-        nowISO();
-
-      this.logger.mutation(
-        '*',
-        source
-      );
-
-      this.emitChange(
-        'state:changed',
-        {
-          path:
-            '*',
-
-          source,
-
-          state:
-            this.snapshot()
-        }
-      );
-    }
-
-    emitChange(
-      eventName,
-      payload
-    ) {
-      this.bus.emit(
-        eventName,
-        payload
-      );
-    }
-
-    sanitize(
-      input
-    ) {
-      const output =
-        deepClone(
-          DEFAULT_STATE
-        );
-
-      const merge =
-        (
-          target,
-          source
-        ) => {
-          if (
-            !source ||
-            typeof source !==
-              'object'
-          ) {
-            return target;
-          }
-
-          for (
-            const [
-              key,
-              value
-            ] of Object.entries(
-              source
-            )
-          ) {
-            if (
-              Array.isArray(
-                value
-              )
-            ) {
-              target[key] =
-                deepClone(
-                  value
-                );
-
-              continue;
-            }
-
-            if (
-              value &&
-              typeof value ===
-                'object'
-            ) {
-              target[key] =
-                merge(
-                  target[key] &&
-                    typeof target[
-                      key
-                    ] ===
-                      'object'
-                    ? target[key]
-                    : {},
-
-                  value
-                );
-
-              continue;
-            }
-
-            target[key] =
-              value;
-          }
-
-          return target;
-        };
-
-      merge(
-        output,
-        input
-      );
-
-      for (
-        const key of [
-          'hope',
-          'freedom',
-          'control',
-          'temporal'
-        ]
-      ) {
-        output.player.stats[
-          key
-        ] =
-          clamp(
-            output.player.stats[
-              key
-            ]
-          );
-      }
-
-      output.version =
-        VERSION;
-
-      return output;
-    }
-  }
-
-  /* ==========================================================================
-     AUDIO
-     ========================================================================== */
-
-  class AudioManager {
-    constructor(
-      state,
-      logger
-    ) {
-      this.state =
-        state;
-
-      this.logger =
-        logger;
-
-      this.context =
-        null;
-
-      this.master =
-        null;
-    }
-
-    ensure() {
-      if (
-        !this.state.get(
-          'settings.audio'
-        )
-      ) {
-        return false;
-      }
-
-      try {
-        const AudioContext =
-          window.AudioContext ||
-          window.webkitAudioContext;
-
-        if (!AudioContext) {
-          return false;
-        }
-
-        if (!this.context) {
-          this.context =
-            new AudioContext();
-
-          this.master =
-            this.context.createGain();
-
-          this.master.gain.value =
-            0.07;
-
-          this.master.connect(
-            this.context.destination
-          );
-        }
-
-        if (
-          this.context.state ===
-          'suspended'
-        ) {
-          this.context.resume();
-        }
-
-        return true;
-      } catch (
-        error
-      ) {
-        this.logger.warn(
-          'Áudio indisponível',
-          error
-        );
-
-        return false;
-      }
-    }
-
-    tone(
-      frequency = 440,
-      duration = 0.06,
-      type = 'sine',
-      volume = 0.2,
-      delay = 0
-    ) {
-      if (
-        !this.ensure()
-      ) {
-        return;
-      }
-
-      const start =
-        this.context.currentTime +
-        delay;
-
-      const oscillator =
-        this.context.createOscillator();
-
-      const gain =
-        this.context.createGain();
-
-      oscillator.type =
-        type;
-
-      oscillator.frequency.setValueAtTime(
-        frequency,
-        start
-      );
-
-      gain.gain.setValueAtTime(
-        0.0001,
-        start
-      );
-
-      gain.gain.exponentialRampToValueAtTime(
-        Math.max(
-          0.001,
-          volume
-        ),
-        start +
-          0.01
-      );
-
-      gain.gain.exponentialRampToValueAtTime(
-        0.0001,
-        start +
-          duration
-      );
-
-      oscillator.connect(
-        gain
-      );
-
-      gain.connect(
-        this.master
-      );
-
-      oscillator.start(
-        start
-      );
-
-      oscillator.stop(
-        start +
-          duration +
-          0.02
-      );
-    }
-
-    click() {
-      this.tone(
-        520,
-        0.045,
-        'triangle',
-        0.18
-      );
-    }
-
-    confirm() {
-      this.tone(
-        420,
-        0.08,
-        'sine',
-        0.20
-      );
-
-      this.tone(
-        660,
-        0.11,
-        'sine',
-        0.15,
-        0.05
-      );
-    }
-
-    choice() {
-      this.tone(
-        300,
-        0.06,
-        'triangle',
-        0.20
-      );
-
-      this.tone(
-        480,
-        0.09,
-        'triangle',
-        0.15,
-        0.045
-      );
-    }
-
-    alert() {
-      this.tone(
-        160,
-        0.14,
-        'sawtooth',
-        0.13
-      );
-    }
-  }
-
-  /* ==========================================================================
-     SAVE MANAGER
-     ========================================================================== */
-
-  class SaveManager {
-    constructor(
-      state,
-      bus,
-      logger,
-      notify
-    ) {
-      this.state =
-        state;
-
-      this.bus =
-        bus;
-
-      this.logger =
-        logger;
-
-      this.notify =
-        notify;
-
-      this.timer =
-        null;
-    }
-
-    hasSave() {
-      try {
-        return Boolean(
-          localStorage.getItem(
-            SAVE_KEY
-          )
-        );
-      } catch {
-        return false;
-      }
-    }
-
-    readRaw() {
-      try {
-        const raw =
-          localStorage.getItem(
-            SAVE_KEY
-          );
-
-        if (!raw) {
-          return null;
-        }
-
-        return JSON.parse(
-          raw
-        );
-      } catch (
-        error
-      ) {
-        this.logger.error(
-          'Save corrompido',
-          error
-        );
-
-        return null;
-      }
-    }
-
-    migrate(
-      payload
-    ) {
-      if (!payload) {
-        return null;
-      }
-
-      if (
-        payload.state
-      ) {
-        return {
-          ...payload,
-
-          version:
-            VERSION,
-
-          state:
-            this.state.sanitize(
-              payload.state
-            )
-        };
-      }
-
-      return {
-        version:
-          VERSION,
-
-        timestamp:
-          payload.timestamp ||
-          nowISO(),
-
-        state:
-          this.state.sanitize(
-            payload
-          )
-      };
-    }
-
-    save({
-      silent = false,
-      autosave = false
-    } = {}) {
-      try {
-        const timestamp =
-          nowISO();
-
-        if (
-          autosave
-        ) {
-          this.state.set(
-            'meta.lastAutosave',
-            timestamp,
-            'autosave'
-          );
-        }
-
-        const payload = {
-          version:
-            VERSION,
-
-          timestamp,
-
-          checksum:
-            'JC-V1',
-
-          state:
-            this.state.snapshot()
-        };
-
-        localStorage.setItem(
-          SAVE_KEY,
-          JSON.stringify(
-            payload
-          )
-        );
-
-        this.state.increment(
-          'statistics.saves',
-          1,
-          autosave
-            ? 'autosave'
-            : 'save'
-        );
-
-        this.bus.emit(
-          'save:completed',
-          payload
-        );
-
-        if (
-          !silent
-        ) {
-          this.notify(
-            'Crônica salva',
-
-            autosave
-              ? 'Salvamento automático concluído.'
-              : 'Seu progresso foi armazenado neste navegador.',
-
-            'success'
-          );
-        }
-
-        return true;
-      } catch (
-        error
-      ) {
-        this.logger.error(
-          'Falha ao salvar',
-          error
-        );
-
-        if (
-          !silent
-        ) {
-          this.notify(
-            'Falha ao salvar',
-
-            'O navegador bloqueou o armazenamento local.',
-
-            'error'
-          );
-        }
-
-        return false;
-      }
-    }
-
-    schedule() {
-      clearTimeout(
-        this.timer
-      );
-
-      this.timer =
-        setTimeout(
-          () =>
-            this.save({
-              silent:
-                true,
-
-              autosave:
-                true
-            }),
-          AUTOSAVE_DELAY
-        );
-    }
-
-    load({
-      silent = false
-    } = {}) {
-      try {
-        const payload =
-          this.migrate(
-            this.readRaw()
-          );
-
-        if (
-          !payload?.state
-        ) {
-          throw new Error(
-            'Nenhum save válido encontrado.'
-          );
-        }
-
-        this.state.replace(
-          payload.state,
-          'save.load'
-        );
-
-        this.bus.emit(
-          'save:loaded',
-          payload
-        );
-
-        if (
-          !silent
-        ) {
-          this.notify(
-            'Crônica restaurada',
-
-            `Save de ${formatDate(
-              payload.timestamp
-            )}.`,
-
-            'success'
-          );
-        }
-
-        return true;
-      } catch (
-        error
-      ) {
-        this.logger.error(
-          'Falha ao carregar save',
-          error
-        );
-
-        if (
-          !silent
-        ) {
-          this.notify(
-            'Não foi possível carregar',
-
-            'O save está ausente ou inválido. Uma nova crônica continua disponível.',
-
-            'error'
-          );
-        }
-
-        return false;
-      }
-    }
-
-    delete() {
-      try {
-        localStorage.removeItem(
-          SAVE_KEY
-        );
-
-        this.bus.emit(
-          'save:deleted'
-        );
-
-        this.notify(
-          'Save apagado',
-
-          'A crônica local foi removida.',
-
-          'warning'
-        );
-
-        return true;
-      } catch (
-        error
-      ) {
-        this.logger.error(
-          'Falha ao apagar save',
-          error
-        );
-
-        return false;
-      }
-    }
-  }
-
-  /* ==========================================================================
-     LOCAIS
-     ========================================================================== */
-
-  const LOCATIONS = {
-    mega_city: {
-      name:
-        'Megacidade',
-
-      act:
-        'PRÓLOGO',
-
-      era:
-        'FUTURO',
-
-      tag:
-        'ZONA DE CONFLITO',
-
-      description:
-        'Região parcialmente funcional sobre uma área devastada.',
-
-      interaction:
-        'Explorar área'
-    },
-
-    chrono_lab: {
-      name:
-        'Complexo Cronos',
-
-      act:
-        'ATO I',
-
-      era:
-        'FUTURO',
-
-      tag:
-        'SETOR RESTRITO',
-
-      description:
-        'O maior experimento temporal já construído pulsa sob toneladas de concreto.',
-
-      interaction:
-        'Examinar o núcleo temporal'
-    },
-
-    archive: {
-      name:
-        'Arquivo de Ruptura',
-
-      act:
-        'ATO I',
-
-      era:
-        'FUTURO',
-
-      tag:
-        'ARQUIVO CENSURADO',
-
-      description:
-        'Relatórios antigos contradizem a versão oficial da missão.',
-
-      interaction:
-        'Ler registros ocultos'
-    },
-
-    transit: {
-      name:
-        'Corredor de Salto',
-
-      act:
-        'ATO II',
-
-      era:
-        'ENTRE ERAS',
-
-      tag:
-        'INSTABILIDADE',
-
-      description:
-        'O espaço perde profundidade. Memórias e possibilidades aparecem como ruído.',
-
-      interaction:
-        'Estabilizar coordenadas'
-    },
-
-    galilee: {
-      name:
-        'Galileia',
-
-      act:
-        'ATO III',
-
-      era:
-        'SÉCULO I',
-
-      tag:
-        'LINHA HISTÓRICA',
-
-      description:
-        'O passado não parece um arquivo. Parece vivo — e não espera por você.',
-
-      interaction:
-        'Observar antes de interferir'
-    }
-  };
-
-  /* ==========================================================================
-     CINEMÁTICAS
-     ========================================================================== */
-
-  const CINEMATICS = [
-    {
-      title:
-        'O MUNDO DESTRUÍDO',
-
-      text:
-        'No fim do século XXI, a humanidade não chegou ao apocalipse de uma só vez. Ela chegou em pequenas decisões, repetidas por décadas, até que viver em crise se tornou normal.'
-    },
-
-    {
-      title:
-        'UMA SOLUÇÃO IMPOSSÍVEL',
-
-      text:
-        'Governos ruíram. Recursos tornaram-se instrumentos de controle. Então surgiu o Projeto Cronos: não uma máquina para consertar o passado, mas para pedir ao passado uma resposta.'
-    },
-
-    {
-      title:
-        'A HIPÓTESE',
-
-      text:
-        'Se a humanidade pudesse encontrar Jesus antes que a história o transformasse em símbolo, talvez pudesse trazer ao futuro uma orientação capaz de unir o que restou.'
-    },
-
-    {
-      title:
-        'O VOLUNTÁRIO',
-
-      text:
-        'Você foi escolhido porque sobreviveu à guerra, conhece sistemas antigos e, segundo os avaliadores, ainda consegue acreditar que escolhas individuais importam.'
-    },
-
-    {
-      title:
-        'A REGRA',
-
-      text:
-        'A viagem não permite mudanças ilimitadas. Cada interferência cobra estabilidade temporal. E a máquina registra não só o que você faz — mas por que fez.'
-    },
-
-    {
-      title:
-        'A PERGUNTA',
-
-      text:
-        'A missão oficial é simples: encontre Jesus e peça ajuda para salvar o mundo. A pergunta que ninguém quer responder é outra: e se o futuro estiver procurando um salvador apenas para evitar mudar a si mesmo?'
-    }
-  ];
-
-  /* ==========================================================================
-     ROTEIRO
-     ========================================================================== */
-
-  const SCENES = {
-
-    g_intro: {
       speaker:
         'PROTOCOLO CRONOLÓGICO',
 
@@ -1899,113 +592,24 @@
         'NARRAÇÃO',
 
       location:
-        'mega_city',
+        'chrono_lab',
 
       text:
-        'A autorização final foi emitida. Antes do salto, você tem acesso à zona externa e ao Complexo Cronos. Observe o mundo que a missão pretende salvar.',
+        'A aeronave atravessa a última camada de fumaça e entra em uma região protegida. O mundo muda em poucos quilômetros: ruínas dão lugar a concreto limpo, corredores sanitizados e barreiras que reconhecem cada pessoa antes que ela atravesse uma porta.',
+
+      onEnter: {
+        codex:
+          'future'
+      },
 
       next:
-        'g_city_choice'
+        'p03_briefing'
     },
 
-    g_city_choice: {
-      speaker:
-        'DRA. MIRELA VOSS',
+    p03_briefing: {
+      id:
+        'p03_briefing',
 
-      role:
-        'DIRETORA DO PROJETO',
-
-      type:
-        'DIÁLOGO',
-
-      location:
-        'mega_city',
-
-      text:
-        'Não precisamos que você julgue o presente. Precisamos que encontre uma resposta no passado. Está claro?',
-
-      choices: [
-        {
-          id:
-            'obey',
-
-          text:
-            '“Está claro. Eu cumpro a missão.”',
-
-          effects: {
-            control:
-              8,
-
-            freedom:
-              -2
-          },
-
-          flags: {
-            obedient:
-              true
-          },
-
-          next:
-            'g_lab'
-        },
-
-        {
-          id:
-            'question',
-
-          text:
-            '“E se a resposta não estiver no passado?”',
-
-          effects: {
-            hope:
-              5,
-
-            freedom:
-              8,
-
-            control:
-              -4
-          },
-
-          flags: {
-            questionedMission:
-              true
-          },
-
-          codex:
-            'paradox',
-
-          next:
-            'g_lab'
-        },
-
-        {
-          id:
-            'silence',
-
-          text:
-            'Permanecer em silêncio.',
-
-          effects: {
-            control:
-              -2,
-
-            temporal:
-              1
-          },
-
-          flags: {
-            silentOpening:
-              true
-          },
-
-          next:
-            'g_lab'
-        }
-      ]
-    },
-
-    g_lab: {
       speaker:
         'DRA. MIRELA VOSS',
 
@@ -2019,220 +623,615 @@
         'chrono_lab',
 
       text:
-        'O núcleo está em 97%. Você terá uma janela limitada. Antes de entrar, há um arquivo que o Conselho preferia que você não visse.',
-
-      onEnter: {
-        missionProgress: [
-          'intro',
-          1
-        ],
-
-        codex:
-          'project'
-      },
-
-      next:
-        'g_archive_choice'
-    },
-
-    g_archive_choice: {
-      speaker:
-        'SISTEMA DE ARQUIVOS',
-
-      role:
-        'RESTRITO',
-
-      type:
-        'DECISÃO',
-
-      location:
-        'archive',
-
-      text:
-        'Acesso não autorizado detectado. O arquivo “RUPTURA-00” contém registros anteriores ao Projeto Cronos. Abrir pode atrasar o lançamento.',
+        '“Não estamos interessados apenas em sua capacidade de sobreviver.” Mirela coloca uma série de imagens sobre a mesa. “Precisamos saber por que você continua tentando ajudar pessoas quando praticamente todo o resto da cidade aprendeu a olhar para o outro lado.”',
 
       choices: [
         {
           id:
-            'open_archive',
+            'answer_people',
 
           text:
-            'Abrir o arquivo mesmo assim.',
+            '“Porque ainda são pessoas.”',
 
           effects: {
+            hope:
+              6,
+
             freedom:
-              7,
-
-            control:
-              -5,
-
-            temporal:
-              -2
+              2
           },
 
           flags: {
-            archiveOpened:
+            motiveHumanity:
               true
           },
 
-          codex:
-            'archive',
-
-          missionProgress: [
-            'truth',
-            1
-          ],
-
           next:
-            'g_archive_reveal'
+            'p04_simulation'
         },
 
         {
           id:
-            'ignore_archive',
+            'answer_duty',
 
           text:
-            'Ignorar e seguir o protocolo.',
+            '“Porque alguém precisa fazer o trabalho.”',
 
           effects: {
             control:
-              7,
-
-            hope:
-              -2
+              5
           },
 
           flags: {
-            archiveIgnored:
+            motiveDuty:
               true
           },
 
           next:
-            'g_jump'
+            'p04_simulation'
+        },
+
+        {
+          id:
+            'answer_unknown',
+
+          text:
+            '“Eu não sei.”',
+
+          effects: {
+            hope:
+              1,
+
+            freedom:
+              3
+          },
+
+          flags: {
+            motiveUncertain:
+              true
+          },
+
+          next:
+            'p04_simulation'
         }
       ]
     },
 
-    g_archive_reveal: {
+    p04_simulation: {
+      id:
+        'p04_simulation',
+
       speaker:
-        'ARQUIVO RUPTURA-00',
+        'PROTOCOLO CRONOLÓGICO',
 
       role:
-        'REGISTRO HISTÓRICO',
+        'SIMULAÇÃO HISTÓRICA',
 
       type:
         'NARRAÇÃO',
 
       location:
-        'archive',
+        'chrono_lab',
 
       text:
-        '“A crise não começou com falta de tecnologia. Começou quando instituições perceberam que o medo tornava populações mais fáceis de administrar.” O relatório termina com páginas removidas.',
-
-      onEnter: {
-        missionUnlock:
-          'truth'
-      },
+        'As imagens começam. Uma guerra. Depois outra. Cidades inundadas. Colheitas perdidas. Hospitais lotados. Governos usando segurança como justificativa para ampliar vigilância. A tecnologia avançou mais rápido do que a responsabilidade necessária para controlá-la.',
 
       next:
-        'g_jump'
+        'p05_truth'
     },
 
-    g_jump: {
+    p05_truth: {
+      id:
+        'p05_truth',
+
       speaker:
-        'PROTOCOLO CRONOLÓGICO',
+        'DRA. MIRELA VOSS',
 
       role:
-        'SISTEMA',
+        'DIRETORA DO PROJETO',
 
       type:
-        'ALERTA',
+        'DIÁLOGO',
 
       location:
-        'transit',
+        'chrono_lab',
 
       text:
-        'SALTO INICIADO. Coordenadas históricas adquiridas. A estabilidade está oscilando. Concentre-se em uma lembrança que defina por que você quer salvar o futuro.',
+        '“O futuro não está simplesmente doente. O futuro aprendeu a funcionar doente.” Mirela pausa. “Nós estudamos milhares de possibilidades. Nenhuma solução direta permanece estável.”',
 
       choices: [
         {
           id:
-            'memory_people',
+            'ask_solution',
 
           text:
-            'As pessoas que ainda tentam ajudar umas às outras.',
+            '“Então por que me trouxeram aqui?”',
 
           effects: {
-            hope:
-              10,
-
-            temporal:
-              3
+            freedom:
+              4
           },
 
           flags: {
-            motivePeople:
+            askedSolution:
               true
           },
 
           next:
-            'g_arrival'
+            'p06_hypothesis'
         },
 
         {
           id:
-            'memory_loss',
+            'ask_cost',
 
           text:
-            'Tudo que você perdeu.',
+            '“Quanto vai custar tentar?”',
 
           effects: {
             control:
-              6,
-
-            hope:
-              -3,
+              3,
 
             temporal:
               -1
           },
 
           flags: {
-            motiveLoss:
+            askedCost:
               true
           },
 
           next:
-            'g_arrival'
+            'p06_hypothesis'
         },
 
         {
           id:
-            'memory_choice',
+            'remain_silent',
 
           text:
-            'A chance de provar que o futuro ainda pode escolher diferente.',
+            'Permanecer em silêncio.',
+
+          effects: {
+            hope:
+              1,
+
+            temporal:
+              1
+          },
+
+          flags: {
+            silentBriefing:
+              true
+          },
+
+          next:
+            'p06_hypothesis'
+        }
+      ]
+    },
+
+    p06_hypothesis: {
+      id:
+        'p06_hypothesis',
+
+      speaker:
+        'DRA. MIRELA VOSS',
+
+      role:
+        'DIRETORA DO PROJETO',
+
+      type:
+        'REVELAÇÃO',
+
+      location:
+        'chrono_lab',
+
+      text:
+        '“Encontramos uma possibilidade que não envolve tentar corrigir o futuro diretamente. Envolve buscar uma resposta no passado.” Ela finalmente diz o nome que todos naquela sala estavam evitando dizer: “Jesus.”',
+
+      next:
+        'p07_reaction'
+    },
+
+    p07_reaction: {
+      id:
+        'p07_reaction',
+
+      speaker:
+        'PROTOCOLO CRONOLÓGICO',
+
+      role:
+        'NARRAÇÃO',
+
+      type:
+        'DECISÃO',
+
+      location:
+        'chrono_lab',
+
+      text:
+        'O silêncio da sala muda de qualidade. Não é mais o silêncio de uma reunião científica. É o silêncio de pessoas que acabaram de admitir que sua última esperança depende de uma hipótese que a própria ciência não consegue explicar.',
+
+      choices: [
+        {
+          id:
+            'believe',
+
+          text:
+            'Acreditar que talvez exista uma chance.',
+
+          effects: {
+            hope:
+              7
+          },
+
+          flags: {
+            initialBelief:
+              true
+          },
+
+          next:
+            'p08_choice'
+        },
+
+        {
+          id:
+            'doubt',
+
+          text:
+            'Questionar a hipótese.',
+
+          effects: {
+            freedom:
+              5,
+
+            hope:
+              -1
+          },
+
+          flags: {
+            initialDoubt:
+              true
+          },
+
+          next:
+            'p08_choice'
+        },
+
+        {
+          id:
+            'reject',
+
+          text:
+            '“Vocês querem transformar uma pessoa em uma solução.”',
+
+          effects: {
+            freedom:
+              7,
+
+            control:
+              -3
+          },
+
+          flags: {
+            recognizedInstrumentalization:
+              true
+          },
+
+          next:
+            'p08_choice'
+        }
+      ]
+    },
+
+    p08_choice: {
+      id:
+        'p08_choice',
+
+      speaker:
+        'DRA. MIRELA VOSS',
+
+      role:
+        'DIRETORA DO PROJETO',
+
+      type:
+        'DIÁLOGO',
+
+      location:
+        'chrono_lab',
+
+      text:
+        '“Nós não sabemos se vai funcionar.” Mirela não tenta esconder a fragilidade da hipótese. “Mas sabemos que não conseguiríamos transportar um grupo inteiro com segurança. Precisamos de uma única pessoa.”',
+
+      choices: [
+        {
+          id:
+            'volunteer',
+
+          text:
+            '“Eu vou.”',
+
+          effects: {
+            hope:
+              4,
+
+            control:
+              4
+          },
+
+          flags: {
+            volunteered:
+              true
+          },
+
+          next:
+            'p09_selection'
+        },
+
+        {
+          id:
+            'ask_why_me',
+
+          text:
+            '“Por que eu?”',
+
+          effects: {
+            freedom:
+              3
+          },
+
+          flags: {
+            questionedSelection:
+              true
+          },
+
+          next:
+            'p09_selection'
+        },
+
+        {
+          id:
+            'ask_probability',
+
+          text:
+            '“Qual é a chance real disso funcionar?”',
+
+          effects: {
+            control:
+              2
+          },
+
+          flags: {
+            requestedProbability:
+              true
+          },
+
+          next:
+            'p09_selection'
+        }
+      ]
+    },
+
+    p09_selection: {
+      id:
+        'p09_selection',
+
+      speaker:
+        'DRA. MIRELA VOSS',
+
+      role:
+        'DIRETORA DO PROJETO',
+
+      type:
+        'REVELAÇÃO',
+
+      location:
+        'chrono_lab',
+
+      text:
+        '“Você sobreviveu onde outros não sobreviveram. Consegue tomar decisões sob pressão. E ainda parece acreditar que uma escolha individual pode importar.” Ela toca a tela. “É exatamente por isso que você é perigoso para este projeto — e exatamente por isso que precisamos de você.”',
+
+      onEnter: {
+        prologueFlag:
+          'selectedForMission'
+      },
+
+      next:
+        'p10_exploration'
+    },
+
+    p10_exploration: {
+      id:
+        'p10_exploration',
+
+      speaker:
+        'PROTOCOLO CRONOLÓGICO',
+
+      role:
+        'INTERFACE DE EXPLORAÇÃO',
+
+      type:
+        'TUTORIAL',
+
+      location:
+        'mega_city',
+
+      text:
+        'Antes de receber a missão definitiva, você recebe acesso limitado à megacidade. Mirela quer que você observe o mundo que pretende salvar. Não existe objetivo secundário obrigatório. Existe algo mais importante: entender o que está em jogo.',
+
+      onEnter: {
+        prologueExploration:
+          true
+      },
+
+      next:
+        'p11_return'
+    },
+
+    p11_return: {
+      id:
+        'p11_return',
+
+      speaker:
+        'PROTOCOLO CRONOLÓGICO',
+
+      role:
+        'NARRAÇÃO',
+
+      type:
+        'TRANSIÇÃO',
+
+      location:
+        'chrono_lab',
+
+      text:
+        'Depois de observar a cidade, você retorna ao Complexo Cronos. Agora as imagens nas paredes parecem diferentes. Você já não está olhando apenas para números. Você está pensando nas pessoas atrás deles.',
+
+      onEnter: {
+        prologueExplorationComplete:
+          true
+      },
+
+      next:
+        'p12_final_briefing'
+    },
+
+    p12_final_briefing: {
+      id:
+        'p12_final_briefing',
+
+      speaker:
+        'DRA. MIRELA VOSS',
+
+      role:
+        'DIRETORA DO PROJETO',
+
+      type:
+        'BRIEFING FINAL',
+
+      location:
+        'chrono_lab',
+
+      text:
+        '“Você sabe o que vai fazer agora.” Mirela ativa a projeção do histórico conhecido. “Viajar ao passado. Localizar Jesus. Explicar a destruição do futuro. Pedir que Ele venha conosco. A organização acredita que Sua presença poderá corrigir aquilo que nós não conseguimos corrigir.”',
+
+      onEnter: {
+        missionBriefingComplete:
+          true
+      },
+
+      next:
+        'p13_mission_question'
+    },
+
+    p13_mission_question: {
+      id:
+        'p13_mission_question',
+
+      speaker:
+        'DRA. MIRELA VOSS',
+
+      role:
+        'DIRETORA DO PROJETO',
+
+      type:
+        'DIÁLOGO',
+
+      location:
+        'chrono_lab',
+
+      text:
+        '“Você entende o tamanho do que está sendo pedido?”',
+
+      choices: [
+        {
+          id:
+            'accept_mission',
+
+          text:
+            '“Sim. Eu aceito a missão.”',
+
+          effects: {
+            control:
+              7,
+
+            hope:
+              4,
+
+            freedom:
+              -2
+          },
+
+          flags: {
+            missionAccepted:
+              true
+          },
+
+          next:
+            'p14_before_departure'
+        },
+
+        {
+          id:
+            'question_mission',
+
+          text:
+            '“Entendo a missão. Mas não sei se trazer alguém do passado para resolver o futuro é certo.”',
+
+          effects: {
+            freedom:
+              8,
+
+            hope:
+              2,
+
+            control:
+              -4
+          },
+
+          flags: {
+            missionQuestioned:
+              true
+          },
+
+          next:
+            'p14_before_departure'
+        },
+
+        {
+          id:
+            'reject_mission',
+
+          text:
+            '“Não. Não posso tratar uma pessoa como uma solução.”',
 
           effects: {
             freedom:
               10,
 
             hope:
-              4
+              -3,
+
+            control:
+              -6
           },
 
           flags: {
-            motiveChoice:
+            missionRefused:
               true
           },
 
           next:
-            'g_arrival'
+            'p14_before_departure'
         }
       ]
     },
 
-    g_arrival: {
+    p14_before_departure: {
+      id:
+        'p14_before_departure',
+
       speaker:
         'PROTOCOLO CRONOLÓGICO',
 
@@ -2243,1498 +1242,223 @@
         'NARRAÇÃO',
 
       location:
-        'galilee',
+        'chrono_lab',
 
       text:
-        'Deslocamento concluído. O ar é quente, o chão é irregular e não existe interface separando você da história. Pela primeira vez, o passado não parece distante.',
-
-      onEnter: {
-        missionProgress: [
-          'intro',
-          1
-        ],
-
-        missionComplete:
-          'intro',
-
-        missionUnlock:
-          'responsibility'
-      },
+        'A sala fica em silêncio. A missão agora faz parte do seu registro. Não há mais como fingir que se trata de uma hipótese abstrata. Em poucas horas, sua decisão será registrada como uma das escolhas que definiram a história da organização.',
 
       next:
-        'g_first_witness'
+        'p15_last_question'
     },
 
-    g_first_witness: {
+    p15_last_question: {
+      id:
+        'p15_last_question',
+
       speaker:
-        'VIAJANTE DESCONHECIDO',
+        'MEMBRO DA ORGANIZAÇÃO',
 
       role:
-        'MORADOR LOCAL',
+        'OBSERVADOR',
 
       type:
-        'DIÁLOGO',
+        'GANCHO',
 
       location:
-        'galilee',
+        'chrono_lab',
 
       text:
-        'Você está perdido? Suas roupas... nunca vi tecido assim. Se procura alguém, talvez seja melhor começar perguntando quem você é.',
+        'Um dos membros da organização se aproxima quando Mirela deixa a sala. Ele não sorri. Apenas pergunta: “Você tem certeza de que quer salvar o mundo?”',
 
       choices: [
         {
           id:
-            'tell_truth',
+            'yes_save_world',
 
           text:
-            '“Sou alguém de muito longe procurando respostas.”',
+            '“Sim.”',
 
           effects: {
             hope:
               5,
 
-            freedom:
-              5
+            control:
+              2
           },
 
           flags: {
-            honestStranger:
+            saidYesToSavingWorld:
               true
           },
 
-          missionProgress: [
-            'responsibility',
-            1
-          ],
-
           next:
-            'g_open_end'
+            'p16_price'
         },
 
         {
           id:
-            'lie_safe',
+            'yes_but',
 
           text:
-            '“Sou mercador. Só estou de passagem.”',
+            '“Sim. Mas não sei se nós sabemos o que significa salvá-lo.”',
 
           effects: {
-            control:
-              6,
+            freedom:
+              7,
 
-            temporal:
-              -2
+            hope:
+              2
           },
 
           flags: {
-            liedStranger:
+            qualifiedYes:
               true
           },
 
-          missionProgress: [
-            'responsibility',
-            1
-          ],
+          next:
+            'p16_price'
+        },
+
+        {
+          id:
+            'not_sure',
+
+          text:
+            '“Eu não tenho certeza.”',
+
+          effects: {
+            freedom:
+              5,
+
+            hope:
+              -1
+          },
+
+          flags: {
+            uncertainSavingWorld:
+              true
+          },
 
           next:
-            'g_open_end'
+            'p16_price'
         }
       ]
     },
 
-    g_open_end: {
+    p16_price: {
+      id:
+        'p16_price',
+
       speaker:
-        'NARRADOR',
+        'MEMBRO DA ORGANIZAÇÃO',
 
       role:
-        'CRÔNICA',
+        'OBSERVADOR',
 
       type:
-        'NARRAÇÃO',
+        'REVELAÇÃO',
 
       location:
-        'galilee',
+        'chrono_lab',
 
       text:
-        'A busca começou. Mas a primeira mudança importante talvez já tenha acontecido: você entrou na história acreditando que veio encontrar uma resposta — e encontrou uma pergunta.',
+        'Ele observa você por alguns segundos. Então responde: “Essa resposta será cobrada de você.” A porta se fecha. Pela primeira vez, você percebe que talvez a missão não esteja perguntando apenas se você consegue salvar o mundo. Talvez esteja perguntando quem você se tornará ao tentar fazê-lo.',
+
+      onEnter: {
+        prologueReady:
+          true
+      },
 
       next:
-        null
+        'p17_transition'
+    },
+
+    p17_transition: {
+      id:
+        'p17_transition',
+
+      speaker:
+        'PROTOCOLO CRONOLÓGICO',
+
+      role:
+        'ENCERRAMENTO DO PRÓLOGO',
+
+      type:
+        'FINAL',
+
+      location:
+        'chrono_lab',
+
+      text:
+        'O registro do Prólogo é encerrado. Você ainda não entrou na máquina. Ainda não viu o passado. Ainda não encontrou Jesus. Mas agora possui uma missão, uma dúvida e um futuro que não pode mais ser ignorado.',
+
+      choices: [
+        {
+          id:
+            'enter_act1',
+
+          text:
+            'Encerrar o Prólogo e iniciar o Ato I.',
+
+          effects: {
+            hope:
+              2
+          },
+
+          flags: {
+            prologueClosed:
+              true
+          },
+
+          next:
+            null
+        }
+      ]
     }
   };
 
-  /* ==========================================================================
-     MISSION MANAGER
-     ========================================================================== */
+  /* =========================================================================
+     PROLOGUE EXPLORATION SYSTEM
+     ========================================================================= */
 
-  class MissionManager {
+  class PrologueExploration {
+
     constructor(
-      state,
-      bus,
-      notify
+      game,
+      scenes
     ) {
+      this.game =
+        game;
+
       this.state =
-        state;
+        game.state;
+
+      this.ui =
+        game.ui;
 
       this.bus =
-        bus;
-
-      this.notify =
-        notify;
-    }
-
-    get(
-      id
-    ) {
-      return this.state.get(
-        `missions.${id}`
-      );
-    }
-
-    unlock(
-      id
-    ) {
-      const mission =
-        this.get(
-          id
-        );
-
-      if (
-        !mission ||
-        mission.status !==
-          'locked'
-      ) {
-        return;
-      }
-
-      this.state.patch(
-        `missions.${id}`,
-        {
-          status:
-            'active'
-        },
-
-        'mission.unlock'
-      );
-
-      this.notify(
-        'Nova missão',
-        mission.title,
-        'info'
-      );
-
-      this.bus.emit(
-        'mission:updated',
-        {
-          id,
-
-          type:
-            'unlock'
-        }
-      );
-    }
-
-    progress(
-      id,
-      amount = 1
-    ) {
-      const mission =
-        this.get(
-          id
-        );
-
-      if (
-        !mission ||
-        mission.status !==
-          'active'
-      ) {
-        return;
-      }
-
-      const next =
-        Math.min(
-          mission.goal,
-          Number(
-            mission.progress
-          ) +
-            Number(
-              amount
-            )
-        );
-
-      this.state.set(
-        `missions.${id}.progress`,
-        next,
-
-        'mission.progress'
-      );
-
-      this.bus.emit(
-        'mission:updated',
-        {
-          id,
-
-          type:
-            'progress',
-
-          progress:
-            next
-        }
-      );
-
-      if (
-        next >=
-        mission.goal
-      ) {
-        this.complete(
-          id
-        );
-      }
-    }
-
-    complete(
-      id
-    ) {
-      const mission =
-        this.get(
-          id
-        );
-
-      if (
-        !mission ||
-        mission.status ===
-          'completed'
-      ) {
-        return;
-      }
-
-      this.state.patch(
-        `missions.${id}`,
-        {
-          status:
-            'completed',
-
-          progress:
-            mission.goal
-        },
-
-        'mission.complete'
-      );
-
-      this.notify(
-        'Missão concluída',
-        mission.title,
-        'success'
-      );
-
-      this.bus.emit(
-        'mission:updated',
-        {
-          id,
-
-          type:
-            'complete'
-        }
-      );
-    }
-
-    active() {
-      return Object.values(
-        this.state.get(
-          'missions'
-        )
-      ).filter(
-        mission =>
-          mission.status ===
-          'active'
-      );
-    }
-  }
-
-  /* ==========================================================================
-     CODEX MANAGER
-     ========================================================================== */
-
-  class CodexManager {
-    constructor(
-      state,
-      bus,
-      notify
-    ) {
-      this.state =
-        state;
-
-      this.bus =
-        bus;
-
-      this.notify =
-        notify;
-    }
-
-    unlock(
-      id
-    ) {
-      if (!id) {
-        return;
-      }
-
-      const entry =
-        this.state.get(
-          `codex.${id}`
-        );
-
-      if (
-        !entry ||
-        entry.unlocked
-      ) {
-        return;
-      }
-
-      this.state.patch(
-        `codex.${id}`,
-        {
-          unlocked:
-            true
-        },
-
-        'codex.unlock'
-      );
-
-      this.notify(
-        'Códex atualizado',
-        entry.title,
-        'info'
-      );
-
-      this.bus.emit(
-        'codex:updated',
-        {
-          id
-        }
-      );
-    }
-
-    unlocked() {
-      return Object.values(
-        this.state.get(
-          'codex'
-        )
-      ).filter(
-        entry =>
-          entry.unlocked
-      );
-    }
-  }
-
-  /* ==========================================================================
-     UI MANAGER
-     ========================================================================== */
-
-  class UIManager {
-    constructor(
-      state,
-      bus,
-      logger,
-      audio
-    ) {
-      this.state =
-        state;
-
-      this.bus =
-        bus;
+        game.bus;
 
       this.logger =
-        logger;
+        game.logger;
 
-      this.audio =
-        audio;
+      this.scenes =
+        scenes;
 
-      this.game =
+      this.layer =
         null;
 
       this.initialized =
         false;
 
-      this.overlayStack =
-        [];
-
-      this.bindingRegistry =
-        new WeakMap();
-
-      this.notificationTimers =
-        new Set();
-    }
-
-    el(
-      id
-    ) {
-      return byId(
-        id
-      );
-    }
-
-    bind(
-      element,
-      event,
-      callback,
-      options
-    ) {
-      if (
-        !element
-      ) {
-        this.logger.warn(
-          `Elemento ausente: ${event}`
-        );
-
-        return false;
-      }
-
-      let registry =
-        this.bindingRegistry.get(
-          element
-        );
-
-      if (!registry) {
-        registry =
-          new Set();
-
-        this.bindingRegistry.set(
-          element,
-          registry
-        );
-      }
-
-      const signature =
-        `${event}:${String(
-          callback
-        )}`;
-
-      if (
-        registry.has(
-          signature
-        )
-      ) {
-        return false;
-      }
-
-      element.addEventListener(
-        event,
-        callback,
-        options
-      );
-
-      registry.add(
-        signature
-      );
-
-      return true;
-    }
-
-    showScreen(
-      screenId
-    ) {
-      qsa(
-        '.screen'
-      ).forEach(
-        screen => {
-          screen.classList.toggle(
-            'active',
-
-            screen.id ===
-              screenId
-          );
-        }
-      );
-
-      let phase =
-        'title';
-
-      if (
-        screenId ===
-        'screenCinematic'
-      ) {
-        phase =
-          'cinematic';
-      }
-
-      if (
-        screenId ===
-        'screenGame'
-      ) {
-        phase =
-          'game';
-      }
-
-      this.state.set(
-        'phase',
-        phase,
-        'ui.showScreen'
-      );
-
-      this.bus.emit(
-        'screen:changed',
-        {
-          id:
-            screenId,
-
-          phase
-        }
-      );
-    }
-
-    transition(
-      callback
-    ) {
-      const layer =
-        this.el(
-          'fadeTransition'
-        );
-
-      if (!layer) {
-        callback();
-        return;
-      }
-
-      layer.classList.add(
-        'active'
-      );
-
-      const reduced =
-        this.state.get(
-          'settings.reducedMotion'
-        );
-
-      const duration =
-        reduced
-          ? 0
-          : 140;
-
-      setTimeout(
-        () => {
-          callback();
-
-          setTimeout(
-            () => {
-              layer.classList.remove(
-                'active'
-              );
-            },
-            duration
-          );
-        },
-        duration
-      );
-    }
-
-    openOverlay(
-      id
-    ) {
-      const overlay =
-        this.el(
-          id
-        );
-
-      if (
-        !overlay
-      ) {
-        this.logger.warn(
-          `Overlay não encontrado: ${id}`
-        );
-
-        return;
-      }
-
-      this.overlayStack =
-        this.overlayStack.filter(
-          item =>
-            item !==
-            id
-        );
-
-      this.overlayStack.push(
-        id
-      );
-
-      overlay.hidden =
+      this.active =
         false;
 
-      overlay.classList.add(
-        'active'
-      );
-
-      overlay.setAttribute(
-        'aria-hidden',
-        'false'
-      );
-
-      if (
-        id ===
-        'saveOverlay'
-      ) {
-        this.renderSaveStatus();
-      }
-
-      if (
-        id ===
-        'questOverlay'
-      ) {
-        this.renderQuestDetail();
-      }
-
-      if (
-        id ===
-        'settingsOverlay'
-      ) {
-        this.renderSettings();
-      }
-
-      this.bus.emit(
-        'overlay:opened',
-        {
-          id
-        }
-      );
+      this.locked =
+        false;
     }
 
-    closeOverlay(
-      id
-    ) {
-      const overlay =
-        this.el(
-          id
-        );
-
-      if (
-        !overlay
-      ) {
-        return;
-      }
-
-      overlay.classList.remove(
-        'active'
-      );
-
-      overlay.hidden =
-        true;
-
-      overlay.setAttribute(
-        'aria-hidden',
-        'true'
-      );
-
-      this.overlayStack =
-        this.overlayStack.filter(
-          item =>
-            item !==
-            id
-        );
-
-      this.bus.emit(
-        'overlay:closed',
-        {
-          id
-        }
-      );
-    }
-
-    closeTopOverlay() {
-      const id =
-        this.overlayStack.at(
-          -1
-        );
-
-      if (!id) {
-        return false;
-      }
-
-      this.closeOverlay(
-        id
-      );
-
-      return true;
-    }
-
-    notify(
-      title,
-      message,
-      type = 'info'
-    ) {
-      const stack =
-        this.el(
-          'notificationStack'
-        );
-
-      if (!stack) {
-        return;
-      }
-
-      const item =
-        document.createElement(
-          'div'
-        );
-
-      item.className =
-        `notification notification-${type}`;
-
-      const titleElement =
-        document.createElement(
-          'strong'
-        );
-
-      titleElement.textContent =
-        safeText(
-          title
-        );
-
-      const messageElement =
-        document.createElement(
-          'span'
-        );
-
-      messageElement.textContent =
-        safeText(
-          message
-        );
-
-      item.append(
-        titleElement,
-        messageElement
-      );
-
-      stack.appendChild(
-        item
-      );
-
-      requestAnimationFrame(
-        () => {
-          item.classList.add(
-            'show'
-          );
-        }
-      );
-
-      const timer =
-        setTimeout(
-          () => {
-            item.classList.remove(
-              'show'
-            );
-
-            setTimeout(
-              () =>
-                item.remove(),
-              300
-            );
-
-            this.notificationTimers.delete(
-              timer
-            );
-          },
-          3500
-        );
-
-      this.notificationTimers.add(
-        timer
-      );
-    }
-
-    render() {
-      const state =
-        this.state.get();
-
-      this.renderStats(
-        state
-      );
-
-      this.renderPlayer(
-        state
-      );
-
-      this.renderWorld(
-        state
-      );
-
-      this.renderMissions(
-        state
-      );
-
-      this.renderCodex(
-        state
-      );
-
-      this.renderSettings(
-        state
-      );
-
-      this.renderSaveStatus();
-
-      this.applyAccessibility(
-        state
-      );
-    }
-
-    renderPlayer(
-      state
-    ) {
-      const name =
-        this.el(
-          'playerNameDisplay'
-        );
-
-      const role =
-        this.el(
-          'playerRoleDisplay'
-        );
-
-      if (name) {
-        name.textContent =
-          state.player.name;
-      }
-
-      if (role) {
-        role.textContent =
-          state.player.role;
-      }
-    }
-
-    renderStats(
-      state
-    ) {
-      const mapping = {
-        hope: [
-          'hopeBar',
-          'hopeValue'
-        ],
-
-        freedom: [
-          'freedomBar',
-          'freedomValue'
-        ],
-
-        control: [
-          'controlBar',
-          'controlValue'
-        ],
-
-        temporal: [
-          'temporalBar',
-          'temporalValue'
-        ]
-      };
-
-      for (
-        const [
-          key,
-          [
-            barId,
-            valueId
-          ]
-        ] of Object.entries(
-          mapping
-        )
-      ) {
-        const value =
-          clamp(
-            state.player.stats[
-              key
-            ]
-          );
-
-        const bar =
-          this.el(
-            barId
-          );
-
-        const label =
-          this.el(
-            valueId
-          );
-
-        if (bar) {
-          bar.style.width =
-            `${value}%`;
-
-          bar.setAttribute(
-            'role',
-            'progressbar'
-          );
-
-          bar.setAttribute(
-            'aria-valuenow',
-            String(
-              value
-            )
-          );
-
-          bar.setAttribute(
-            'aria-valuemin',
-            '0'
-          );
-
-          bar.setAttribute(
-            'aria-valuemax',
-            '100'
-          );
-        }
-
-        if (label) {
-          label.textContent =
-            String(
-              Math.round(
-                value
-              )
-            );
-        }
-      }
-    }
-
-    renderWorld(
-      state
-    ) {
-      const location =
-        LOCATIONS[
-          state.world.location
-        ] ||
-        LOCATIONS.mega_city;
-
-      const mapping = {
-        locationAct:
-          location.act,
-
-        locationName:
-          location.name,
-
-        eraValue:
-          location.era,
-
-        sceneTag:
-          location.tag,
-
-        sceneDescription:
-          location.description,
-
-        interactionText:
-          location.interaction
-      };
-
-      for (
-        const [
-          id,
-          value
-        ] of Object.entries(
-          mapping
-        )
-      ) {
-        const node =
-          this.el(
-            id
-          );
-
-        if (node) {
-          node.textContent =
-            safeText(
-              value
-            );
-        }
-      }
-
-      const scene =
-        this.el(
-          'worldScene'
-        );
-
-      if (scene) {
-        scene.dataset.location =
-          state.world.location;
-      }
-
-      const phase =
-        this.el(
-          'phaseLabel'
-        );
-
-      if (phase) {
-        phase.textContent =
-          `${location.act} // ${location.era}`;
-      }
-
-      const status =
-        this.el(
-          'worldStatus'
-        );
-
-      if (status) {
-        const temporal =
-          clamp(
-            state.player.stats.temporal
-          );
-
-        if (
-          temporal <=
-          20
-        ) {
-          status.textContent =
-            'INSTABILIDADE CRÍTICA';
-        } else if (
-          temporal <=
-          50
-        ) {
-          status.textContent =
-            'LINHA TEMPORAL OSCILANTE';
-        } else {
-          status.textContent =
-            'LINHA TEMPORAL ESTÁVEL';
-        }
-      }
-    }
-
-    renderMissions(
-      state
-    ) {
-      const list =
-        this.el(
-          'missionList'
-        );
-
-      const count =
-        this.el(
-          'missionCount'
-        );
-
-      if (!list) {
-        return;
-      }
-
-      list.replaceChildren();
-
-      const missions =
-        Object.values(
-          state.missions
-        ).filter(
-          mission =>
-            mission.status !==
-            'locked'
-        );
-
-      if (count) {
-        count.textContent =
-          String(
-            missions.filter(
-              mission =>
-                mission.status ===
-                'active'
-            ).length
-          );
-      }
-
-      for (
-        const mission
-        of missions
-      ) {
-        const item =
-          document.createElement(
-            'div'
-          );
-
-        item.className =
-          'mission-item';
-
-        const top =
-          document.createElement(
-            'div'
-          );
-
-        top.className =
-          'mission-item-top';
-
-        const title =
-          document.createElement(
-            'strong'
-          );
-
-        title.textContent =
-          mission.title;
-
-        const progress =
-          document.createElement(
-            'span'
-          );
-
-        progress.textContent =
-          `${mission.progress}/${mission.goal}`;
-
-        top.append(
-          title,
-          progress
-        );
-
-        const description =
-          document.createElement(
-            'p'
-          );
-
-        description.textContent =
-          mission.description;
-
-        const progressBar =
-          document.createElement(
-            'div'
-          );
-
-        progressBar.className =
-          'mission-progress';
-
-        const progressInner =
-          document.createElement(
-            'i'
-          );
-
-        const percentage =
-          Math.min(
-            100,
-
-            (
-              Number(
-                mission.progress
-              ) /
-              Math.max(
-                1,
-                Number(
-                  mission.goal
-                )
-              )
-            ) *
-              100
-          );
-
-        progressInner.style.width =
-          `${percentage}%`;
-
-        progressBar.append(
-          progressInner
-        );
-
-        item.append(
-          top,
-          description,
-          progressBar
-        );
-
-        list.appendChild(
-          item
-        );
-      }
-    }
-
-    renderQuestDetail() {
-      const list =
-        this.el(
-          'questDetailList'
-        );
-
-      if (!list) {
-        return;
-      }
-
-      list.replaceChildren();
-
-      const missions =
-        Object.values(
-          this.state.get(
-            'missions'
-          )
-        ).filter(
-          mission =>
-            mission.status !==
-            'locked'
-        );
-
-      for (
-        const mission
-        of missions
-      ) {
-        const item =
-          document.createElement(
-            'div'
-          );
-
-        item.className =
-          'quest-detail-item';
-
-        const title =
-          document.createElement(
-            'h3'
-          );
-
-        title.textContent =
-          mission.title;
-
-        const description =
-          document.createElement(
-            'p'
-          );
-
-        description.textContent =
-          mission.description;
-
-        const state =
-          document.createElement(
-            'span'
-          );
-
-        state.textContent =
-          `PROGRESSO: ${mission.progress}/${mission.goal}`;
-
-        item.append(
-          title,
-          description,
-          state
-        );
-
-        list.appendChild(
-          item
-        );
-      }
-    }
-
-    renderCodex(
-      state
-    ) {
-      const progress =
-        this.el(
-          'codexProgress'
-        );
-
-      const unlocked =
-        Object.values(
-          state.codex
-        ).filter(
-          entry =>
-            entry.unlocked
-        );
-
-      if (progress) {
-        progress.textContent =
-          `${unlocked.length} de ${
-            Object.keys(
-              state.codex
-            ).length
-          } registros desbloqueados.`;
-      }
-
-      const panel =
-        this.el(
-          'codexTab'
-        );
-
-      if (!panel) {
-        return;
-      }
-
-      qsa(
-        '.jc-codex-generated',
-        panel
-      ).forEach(
-        node =>
-          node.remove()
-      );
-
-      for (
-        const entry
-        of unlocked
-      ) {
-        if (
-          entry.id ===
-          'future'
-        ) {
-          continue;
-        }
-
-        const node =
-          document.createElement(
-            'div'
-          );
-
-        node.className =
-          'codex-entry jc-codex-generated';
-
-        const label =
-          document.createElement(
-            'span'
-          );
-
-        label.className =
-          'codex-label';
-
-        label.textContent =
-          entry.category;
-
-        const text =
-          document.createElement(
-            'p'
-          );
-
-        const strong =
-          document.createElement(
-            'strong'
-          );
-
-        strong.textContent =
-          entry.title;
-
-        text.append(
-          strong,
-          document.createElement(
-            'br'
-          ),
-          document.createTextNode(
-            entry.text
-          )
-        );
-
-        node.append(
-          label,
-          text
-        );
-
-        panel.appendChild(
-          node
-        );
-      }
-    }
-
-    renderSettings() {
-      const settings =
-        this.state.get(
-          'settings'
-        );
-
-      const map = {
-        settingFastText:
-          'fastText',
-
-        settingHighContrast:
-          'highContrast',
-
-        settingReducedMotion:
-          'reducedMotion',
-
-        settingAudio:
-          'audio'
-      };
-
-      for (
-        const [
-          id,
-          key
-        ] of Object.entries(
-          map
-        )
-      ) {
-        const input =
-          this.el(
-            id
-          );
-
-        if (input) {
-          input.checked =
-            Boolean(
-              settings[
-                key
-              ]
-            );
-        }
-      }
-    }
-
-    renderSaveStatus() {
-      const save =
-        this.game?.save;
-
-      if (!save) {
-        return;
-      }
-
-      const hasSave =
-        save.hasSave();
-
-      const payload =
-        hasSave
-          ? save.readRaw()
-          : null;
-
-      const text =
-        hasSave
-          ? `Último registro: ${formatDate(
-              payload?.timestamp
-            )}`
-          : 'Nenhum save encontrado';
-
-      [
-        'saveCurrentLabel',
-        'loadCurrentLabel'
-      ].forEach(
-        id => {
-          const node =
-            this.el(
-              id
-            );
-
-          if (node) {
-            node.textContent =
-              text;
-          }
-        }
-      );
-
-      const loadButton =
-        this.el(
-          'loadGameButton'
-        );
-
-      const deleteButton =
-        this.el(
-          'deleteSaveButton'
-        );
-
-      if (
-        loadButton
-      ) {
-        loadButton.disabled =
-          !hasSave;
-      }
-
-      if (
-        deleteButton
-      ) {
-        deleteButton.disabled =
-          !hasSave;
-      }
-    }
-
-    applyAccessibility(
-      state
-    ) {
-      document.body.classList.toggle(
-        'high-contrast',
-        Boolean(
-          state.settings
-            .highContrast
-        )
-      );
-
-      document.body.classList.toggle(
-        'reduced-motion',
-        Boolean(
-          state.settings
-            .reducedMotion
-        )
-      );
-    }
-
-    initBindings(
-      game
-    ) {
+    init() {
       if (
         this.initialized
       ) {
@@ -3744,493 +1468,253 @@
       this.initialized =
         true;
 
-      this.game =
-        game;
-
-      /* ----------------------------------------------------------------------
-         MENU PRINCIPAL / TELA INICIAL
-         ---------------------------------------------------------------------- */
-
-      this.bind(
-        this.el(
-          'newGameButton'
-        ),
-        'click',
-        () =>
-          game.startNewGame()
+      ensurePrologueState(
+        this.game
       );
 
-      this.bind(
-        this.el(
-          'continueButton'
-        ),
-        'click',
-        () =>
-          game.continueGame()
+      this.createInterface();
+
+      this.bindEvents();
+
+      this.logger.info(
+        'Sistema de exploração do Prólogo preparado.'
       );
+    }
 
-      /* ----------------------------------------------------------------------
-         CINEMÁTICA
-         ---------------------------------------------------------------------- */
-
-      this.bind(
-        this.el(
-          'cinematicNext'
-        ),
-        'click',
-        () =>
-          game.narrative.nextCinematic()
-      );
-
-      this.bind(
-        this.el(
-          'cinematicPrevious'
-        ),
-        'click',
-        () =>
-          game.narrative.prevCinematic()
-      );
-
-      /* ----------------------------------------------------------------------
-         DIÁLOGO
-         ---------------------------------------------------------------------- */
-
-      this.bind(
-        this.el(
-          'dialogueContinueButton'
-        ),
-        'click',
-        () =>
-          game.narrative.continue()
-      );
-
-      this.bind(
-        this.el(
-          'dialogueSkipButton'
-        ),
-        'click',
-        () =>
-          game.narrative.skipTyping()
-      );
-
-      /* ----------------------------------------------------------------------
-         MUNDO
-         ---------------------------------------------------------------------- */
-
-      this.bind(
-        this.el(
-          'inspectButton'
-        ),
-        'click',
-        () =>
-          game.inspect()
-      );
-
-      this.bind(
-        this.el(
-          'questButton'
-        ),
-        'click',
-        () =>
-          this.openOverlay(
-            'questOverlay'
-          )
-      );
-
-      /* ----------------------------------------------------------------------
-         SALVAMENTO
-         ---------------------------------------------------------------------- */
-
-      this.bind(
-        this.el(
-          'quickSaveButton'
-        ),
-        'click',
-        () =>
-          game.save.save()
-      );
-
-      this.bind(
-        this.el(
-          'openSaveButton'
-        ),
-        'click',
-        () =>
-          this.openOverlay(
-            'saveOverlay'
-          )
-      );
-
-      /* ----------------------------------------------------------------------
-         MENU
-         ---------------------------------------------------------------------- */
-
-      this.bind(
-        this.el(
-          'menuButton'
-        ),
-        'click',
-        () =>
-          this.openOverlay(
-            'menuOverlay'
-          )
-      );
-
-      /* ----------------------------------------------------------------------
-         CONFIGURAÇÕES
-         ---------------------------------------------------------------------- */
-
-      this.bind(
-        this.el(
-          'openSettingsButton'
-        ),
-        'click',
-        () =>
-          this.openOverlay(
-            'settingsOverlay'
-          )
-      );
-
-      /* ----------------------------------------------------------------------
-         SALVAR / CARREGAR
-         ---------------------------------------------------------------------- */
-
-      this.bind(
-        this.el(
-          'saveGameButton'
-        ),
-        'click',
-        () => {
-          game.save.save();
-
-          this.renderSaveStatus();
-        }
-      );
-
-      this.bind(
-        this.el(
-          'loadGameButton'
-        ),
-        'click',
-        () => {
-          game.loadSavedGame();
-        }
-      );
-
-      this.bind(
-        this.el(
-          'deleteSaveButton'
-        ),
-        'click',
-        () => {
-          game.deleteSaveWithConfirm();
-        }
-      );
-
-      /* ----------------------------------------------------------------------
-         CONFIGURAÇÕES
-         ---------------------------------------------------------------------- */
-
-      this.bind(
-        this.el(
-          'settingFastText'
-        ),
-        'change',
-        event =>
-          game.settings.set(
-            'fastText',
-            event.target.checked
-          )
-      );
-
-      this.bind(
-        this.el(
-          'settingHighContrast'
-        ),
-        'change',
-        event =>
-          game.settings.set(
-            'highContrast',
-            event.target.checked
-          )
-      );
-
-      this.bind(
-        this.el(
-          'settingReducedMotion'
-        ),
-        'change',
-        event =>
-          game.settings.set(
-            'reducedMotion',
-            event.target.checked
-          )
-      );
-
-      this.bind(
-        this.el(
-          'settingAudio'
-        ),
-        'change',
-        event =>
-          game.settings.set(
-            'audio',
-            event.target.checked
-          )
-      );
-
-      /* ----------------------------------------------------------------------
-         MENU DE OPÇÕES
-         ---------------------------------------------------------------------- */
-
-      this.bind(
-        this.el(
-          'menuSave'
-        ),
-        'click',
-        () => {
-          this.closeOverlay(
-            'menuOverlay'
+    createInterface() {
+      if (
+        byId(
+          'jcPrologueExploration'
+        )
+      ) {
+        this.layer =
+          byId(
+            'jcPrologueExploration'
           );
 
-          this.openOverlay(
-            'saveOverlay'
-          );
-        }
-      );
+        return;
+      }
 
-      this.bind(
-        this.el(
-          'menuSettings'
-        ),
-        'click',
-        () => {
-          this.closeOverlay(
-            'menuOverlay'
-          );
-
-          this.openOverlay(
-            'settingsOverlay'
-          );
-        }
-      );
-
-      this.bind(
-        this.el(
-          'menuCodex'
-        ),
-        'click',
-        () => {
-          this.closeOverlay(
-            'menuOverlay'
-          );
-
-          game.activateSystemTab(
-            'codexTab'
-          );
-        }
-      );
-
-      this.bind(
-        this.el(
-          'menuVisualLab'
-        ),
-        'click',
-        () => {
-          this.closeOverlay(
-            'menuOverlay'
-          );
-
-          this.openOverlay(
-            'visualLabOverlay'
-          );
-        }
-      );
-
-      this.bind(
-        this.el(
-          'menuRestart'
-        ),
-        'click',
-        () => {
-          this.closeOverlay(
-            'menuOverlay'
-          );
-
-          game.restartToTitle();
-        }
-      );
-
-      /* ----------------------------------------------------------------------
-         FECHAMENTO DE OVERLAYS
-         ---------------------------------------------------------------------- */
-
-      qsa(
-        '.close-button'
-      ).forEach(
-        button => {
-          this.bind(
-            button,
-            'click',
-            () => {
-              const overlay =
-                button.closest(
-                  '.overlay'
-                );
-
-              if (
-                overlay
-              ) {
-                this.closeOverlay(
-                  overlay.id
-                );
-              }
-            }
-          );
-        }
-      );
-
-      qsa(
-        '.overlay'
-      ).forEach(
-        overlay => {
-          this.bind(
-            overlay,
-            'click',
-            event => {
-              if (
-                event.target ===
-                overlay
-              ) {
-                this.closeOverlay(
-                  overlay.id
-                );
-              }
-            }
-          );
-        }
-      );
-
-      /* ----------------------------------------------------------------------
-         ABAS DO HUD
-         ---------------------------------------------------------------------- */
-
-      this.bind(
-        document,
-        'click',
-        event => {
-          const target =
-            event.target instanceof
-            Element
-              ? event.target.closest(
-                  '.system-tab'
-                )
-              : null;
-
-          if (!target) {
-            return;
-          }
-
-          const tab =
-            target.dataset.tab;
-
-          if (
-            tab
-          ) {
-            game.activateSystemTab(
-              tab
-            );
-          }
-        }
-      );
-
-      /* ----------------------------------------------------------------------
-         ABAS DO LABORATÓRIO VISUAL
-         ---------------------------------------------------------------------- */
-
-      this.bind(
-        document,
-        'click',
-        event => {
-          const target =
-            event.target instanceof
-            Element
-              ? event.target.closest(
-                  '.visual-lab-tab'
-                )
-              : null;
-
-          if (!target) {
-            return;
-          }
-
-          const mode =
-            target.dataset.mode ||
-            'process';
-
-          game.visualLab.setMode(
-            mode
-          );
-        }
-      );
-
-      this.bind(
-        this.el(
-          'visualLabRefresh'
-        ),
-        'click',
-        () =>
-          game.visualLab.refresh(
-            true
-          )
-      );
-
-      this.bind(
-        this.el(
-          'visualLabClear'
-        ),
-        'click',
-        () =>
-          game.visualLab.clear()
-      );
-
-      /* ----------------------------------------------------------------------
-         ESCOLHAS — CORREÇÃO PRINCIPAL
-         ----------------------------------------------------------------------
-
-         O container #choiceContainer NÃO é destruído.
-
-         Os botões internos são recriados a cada cena.
-
-         Por isso o evento é delegado ao container.
-
-         Exemplo:
-
-         choiceContainer
-             ├── button choice #1
-             ├── button choice #2
-             └── button choice #3
-
-         Quando os botões forem recriados, o listener permanece.
-         ---------------------------------------------------------------------- */
-
-      const choiceContainer =
-        this.el(
-          'choiceContainer'
+      const viewport =
+        byId(
+          'worldViewport'
         );
 
-      this.bind(
-        choiceContainer,
+      if (!viewport) {
+        return;
+      }
+
+      this.layer =
+        create(
+          'section',
+          'jc-prologue-exploration'
+        );
+
+      this.layer.id =
+        'jcPrologueExploration';
+
+      this.layer.setAttribute(
+        'aria-label',
+        'Exploração do Prólogo'
+      );
+
+      const header =
+        create(
+          'div',
+          'jc-prologue-exploration-header'
+        );
+
+      const title =
+        create(
+          'strong',
+          '',
+          'EXPLORAÇÃO // MEGACIDADE'
+        );
+
+      const status =
+        create(
+          'span',
+          'jc-prologue-exploration-status',
+          'OBSERVAÇÃO LIVRE'
+        );
+
+      header.append(
+        title,
+        status
+      );
+
+      const description =
+        create(
+          'p',
+          'jc-prologue-exploration-description',
+          'Escolha os pontos que deseja investigar. Algumas descobertas alteram sua percepção da missão.'
+        );
+
+      const grid =
+        create(
+          'div',
+          'jc-prologue-poi-grid'
+        );
+
+      this.layer.append(
+        header,
+        description,
+        grid
+      );
+
+      /*
+       * Inserimos no viewport.
+       */
+      viewport.appendChild(
+        this.layer
+      );
+
+      this.injectStyles();
+
+      this.render();
+    }
+
+    injectStyles() {
+      if (
+        byId(
+          'jcPrologueExplorationStyle'
+        )
+      ) {
+        return;
+      }
+
+      const style =
+        create(
+          'style'
+        );
+
+      style.id =
+        'jcPrologueExplorationStyle';
+
+      style.textContent = `
+        .jc-prologue-exploration {
+          position: relative;
+          z-index: 20;
+          margin: 14px;
+          padding: 14px;
+          border: 1px solid rgba(139,200,255,.20);
+          border-radius: 14px;
+          background: rgba(5,9,16,.82);
+          backdrop-filter: blur(14px);
+          box-shadow: 0 18px 50px rgba(0,0,0,.30);
+        }
+
+        .jc-prologue-exploration-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 8px;
+        }
+
+        .jc-prologue-exploration-header strong {
+          font-size: .68rem;
+          letter-spacing: .16em;
+          text-transform: uppercase;
+        }
+
+        .jc-prologue-exploration-status {
+          font-size: .58rem;
+          letter-spacing: .12em;
+          color: #72f6dc;
+        }
+
+        .jc-prologue-exploration-description {
+          margin: 0 0 12px;
+          color: rgba(210,230,248,.72);
+          font-size: .76rem;
+          line-height: 1.5;
+        }
+
+        .jc-prologue-poi-grid {
+          display: grid;
+          grid-template-columns: repeat(2,minmax(0,1fr));
+          gap: 8px;
+        }
+
+        .jc-prologue-poi {
+          position: relative;
+          min-height: 84px;
+          padding: 11px;
+          text-align: left;
+          border: 1px solid rgba(139,200,255,.14);
+          border-radius: 10px;
+          color: inherit;
+          background: rgba(11,20,34,.82);
+          cursor: pointer;
+          transition: transform .18s ease,
+                      border-color .18s ease,
+                      background .18s ease,
+                      opacity .18s ease;
+        }
+
+        .jc-prologue-poi:hover {
+          transform: translateY(-2px);
+          border-color: rgba(139,200,255,.42);
+          background: rgba(17,32,52,.94);
+        }
+
+        .jc-prologue-poi:focus-visible {
+          outline: 2px solid #8bc8ff;
+          outline-offset: 2px;
+        }
+
+        .jc-prologue-poi.visited {
+          opacity: .58;
+        }
+
+        .jc-prologue-poi.locked {
+          cursor: not-allowed;
+          opacity: .35;
+        }
+
+        .jc-prologue-poi-code {
+          display: block;
+          margin-bottom: 4px;
+          color: #8bc8ff;
+          font-size: .56rem;
+          letter-spacing: .12em;
+        }
+
+        .jc-prologue-poi strong {
+          display: block;
+          margin-bottom: 5px;
+          font-size: .75rem;
+        }
+
+        .jc-prologue-poi small {
+          display: block;
+          color: rgba(210,230,248,.58);
+          font-size: .66rem;
+          line-height: 1.4;
+        }
+
+        @media (max-width: 680px) {
+          .jc-prologue-poi-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `;
+
+      document.head.appendChild(
+        style
+      );
+    }
+
+    bindEvents() {
+      this.layer?.addEventListener(
         'click',
         event => {
-          const source =
-            event.target;
-
           const button =
-            source instanceof
+            event.target instanceof
             Element
-              ? source.closest(
-                  'button.choice-button'
+              ? event.target.closest(
+                  '[data-prologue-poi]'
                 )
               : null;
 
@@ -4238,351 +1722,922 @@
             return;
           }
 
-          if (
-            !choiceContainer.contains(
-              button
-            )
-          ) {
+          const id =
+            button.dataset.prologuePoi;
+
+          if (!id) {
             return;
           }
 
-          event.preventDefault();
-          event.stopPropagation();
+          this.inspect(
+            id
+          );
+        }
+      );
+    }
 
-          if (
-            button.disabled
-          ) {
-            return;
+    start() {
+      this.init();
+
+      this.active =
+        true;
+
+      this.state.set(
+        'prologue.explorationUnlocked',
+        true,
+        'prologue.exploration.start'
+      );
+
+      this.render();
+
+      this.ui.notify(
+        'Exploração liberada',
+        'Investigue a megacidade antes de retornar ao Complexo Cronos.',
+        'info'
+      );
+
+      this.bus.emit(
+        'prologue:explorationStarted'
+      );
+    }
+
+    stop() {
+      this.active =
+        false;
+
+      if (
+        this.layer
+      ) {
+        this.layer.classList.remove(
+          'active'
+        );
+      }
+    }
+
+    inspect(
+      id
+    ) {
+      if (
+        !this.active ||
+        this.locked
+      ) {
+        return;
+      }
+
+      const poi =
+        PROLOGUE_POIS[
+          id
+        ];
+
+      if (!poi) {
+        return;
+      }
+
+      const visited =
+        this.state.get(
+          'prologue.visitedPOIs'
+        ) || [];
+
+      const alreadyVisited =
+        visited.includes(
+          id
+        );
+
+      if (
+        alreadyVisited
+      ) {
+        this.ui.notify(
+          poi.title,
+          'Você já registrou esta observação.',
+          'info'
+        );
+
+        return;
+      }
+
+      this.locked =
+        true;
+
+      /*
+       * Marca imediatamente.
+       */
+      this.state.set(
+        'prologue.visitedPOIs',
+        [
+          ...visited,
+          id
+        ],
+        'prologue.exploration.visit'
+      );
+
+      /*
+       * Descoberta.
+       */
+      const discoveries =
+        this.state.get(
+          'prologue.discoveries'
+        ) || [];
+
+      if (
+        poi.discovery &&
+        !discoveries.includes(
+          poi.discovery
+        )
+      ) {
+        this.state.set(
+          'prologue.discoveries',
+          [
+            ...discoveries,
+            poi.discovery
+          ],
+          'prologue.discovery'
+        );
+      }
+
+      /*
+       * Consequências.
+       */
+      this.applyConsequence(
+        poi
+      );
+
+      /*
+       * Registra no Campaign Engine.
+       */
+      if (
+        this.game.campaign
+          ?.campaign
+          ?.decisions
+      ) {
+        this.game.campaign.campaign.decisions.record({
+          id:
+            `explore_${id}`,
+
+          scene:
+            'p10_exploration',
+
+          text:
+            poi.title,
+
+          metadata: {
+            type:
+              'exploration'
           }
+        });
+      }
 
-          const choiceId =
-            safeText(
-              button.dataset.choiceId
-            ).trim();
+      this.ui.notify(
+        poi.title,
+        poi.description,
+        'info'
+      );
 
-          if (!choiceId) {
-            this.logger.error(
-              'choice-button sem data-choice-id'
+      this.state.set(
+        'prologue.cityObserved',
+        true,
+        'prologue.observation'
+      );
+
+      this.render();
+
+      this.bus.emit(
+        'prologue:poiInspected',
+        {
+          id,
+          poi
+        }
+      );
+
+      /*
+       * Pequeno intervalo para permitir
+       * que a interface mostre a descoberta.
+       */
+      setTimeout(
+        () => {
+          this.locked =
+            false;
+
+          this.checkComplete();
+        },
+        160
+      );
+    }
+
+    applyConsequence(
+      poi
+    ) {
+      const consequence =
+        poi.consequence;
+
+      if (!consequence) {
+        return;
+      }
+
+      /*
+       * Estatísticas.
+       */
+      if (
+        consequence.stats
+      ) {
+        for (
+          const [
+            key,
+            value
+          ] of Object.entries(
+            consequence.stats
+          )
+        ) {
+          this.state.adjustStat(
+            key,
+            value,
+            `prologue.poi.${poi.id}`
+          );
+        }
+      }
+
+      /*
+       * Flags.
+       */
+      if (
+        consequence.flags
+      ) {
+        for (
+          const [
+            key,
+            value
+          ] of Object.entries(
+            consequence.flags
+          )
+        ) {
+          this.state.set(
+            `narrative.flags.${key}`,
+            value,
+            `prologue.poi.${poi.id}`
+          );
+        }
+      }
+    }
+
+    checkComplete() {
+      const visited =
+        this.state.get(
+          'prologue.visitedPOIs'
+        ) || [];
+
+      /*
+       * Não obrigamos o jogador a fazer
+       * todos os pontos.
+       *
+       * A exploração é considerada concluída
+       * quando ele vê pelo menos três.
+       */
+      if (
+        visited.length >=
+        3
+      ) {
+        if (
+          !this.state.get(
+            'prologue.explorationComplete'
+          )
+        ) {
+          this.state.set(
+            'prologue.explorationComplete',
+            true,
+            'prologue.exploration.complete'
+          );
+
+          this.ui.notify(
+            'Exploração concluída',
+            'Você reuniu observações suficientes para retornar ao Complexo Cronos.',
+            'success'
+          );
+
+          this.bus.emit(
+            'prologue:explorationComplete'
+          );
+        }
+      }
+
+      this.render();
+    }
+
+    render() {
+      if (!this.layer) {
+        return;
+      }
+
+      const grid =
+        this.layer.querySelector(
+          '.jc-prologue-poi-grid'
+        );
+
+      const status =
+        this.layer.querySelector(
+          '.jc-prologue-exploration-status'
+        );
+
+      if (!grid) {
+        return;
+      }
+
+      const visited =
+        this.state.get(
+          'prologue.visitedPOIs'
+        ) || [];
+
+      grid.replaceChildren();
+
+      Object.values(
+        PROLOGUE_POIS
+      ).forEach(
+        (
+          poi,
+          index
+        ) => {
+          const button =
+            create(
+              'button',
+              'jc-prologue-poi'
             );
 
-            return;
+          button.type =
+            'button';
+
+          button.dataset.prologuePoi =
+            poi.id;
+
+          const already =
+            visited.includes(
+              poi.id
+            );
+
+          if (
+            already
+          ) {
+            button.classList.add(
+              'visited'
+            );
           }
 
-          game.narrative.selectChoiceById(
-            choiceId
+          const code =
+            create(
+              'span',
+              'jc-prologue-poi-code',
+
+              `POI-${String(
+                index + 1
+              ).padStart(
+                2,
+                '0'
+              )}`
+            );
+
+          const title =
+            create(
+              'strong',
+              '',
+              poi.title
+            );
+
+          const short =
+            create(
+              'small',
+              '',
+              already
+                ? 'Observação registrada.'
+                : poi.short
+            );
+
+          button.append(
+            code,
+            title,
+            short
+          );
+
+          grid.appendChild(
+            button
           );
         }
       );
 
-      /* ----------------------------------------------------------------------
-         TECLADO
-         ---------------------------------------------------------------------- */
+      if (status) {
+        status.textContent =
+          `${visited.length}/3 OBSERVAÇÕES`;
+      }
 
-      this.bind(
-        document,
-        'keydown',
-        event =>
-          game.handleKey(
-            event
-          )
+      this.layer.classList.toggle(
+        'active',
+        this.active
       );
-
-      this.renderSaveStatus();
     }
   }
 
-  /* ==========================================================================
-     NARRATIVE ENGINE
-     ========================================================================== */
+  /* =========================================================================
+     PROLOGUE CONTROLLER
+     ========================================================================= */
 
-  class NarrativeEngine {
+  class PrologueController {
+
     constructor(
-      state,
-      bus,
-      ui,
-      logger,
-      audio,
-      missions,
-      codex
+      game
     ) {
-      this.state =
-        state;
+      this.game =
+        game;
 
-      this.bus =
-        bus;
+      this.state =
+        game.state;
 
       this.ui =
-        ui;
+        game.ui;
+
+      this.bus =
+        game.bus;
 
       this.logger =
-        logger;
+        game.logger;
 
-      this.audio =
-        audio;
+      this.narrative =
+        game.narrative;
 
-      this.missions =
-        missions;
+      this.exploration =
+        new PrologueExploration(
+          game,
+          PROLOGUE_SCENES
+        );
 
-      this.codex =
-        codex;
-
-      this.current =
-        null;
-
-      this.timer =
-        null;
-
-      this.typing =
+      this.initialized =
         false;
 
-      this.fullText =
-        '';
+      this.originalStartNewGame =
+        null;
 
-      this.charIndex =
-        0;
+      this.originalContinueGame =
+        null;
+
+      this.originalGoto =
+        null;
+
+      this.originalSelectChoice =
+        null;
+    }
+
+    init() {
+      if (
+        this.initialized
+      ) {
+        return;
+      }
+
+      this.initialized =
+        true;
+
+      ensurePrologueState(
+        this.game
+      );
+
+      this.exploration.init();
+
+      this.patchGameStart();
+
+      this.patchNarrative();
+
+      this.bindEvents();
+
+      this.logger.info(
+        'Prologue Controller conectado.'
+      );
+    }
+
+    /* =======================================================================
+       PATCH DE NOVO JOGO
+       ======================================================================= */
+
+    patchGameStart() {
+      if (
+        this.game.__prologueStartPatched
+      ) {
+        return;
+      }
+
+      this.game.__prologueStartPatched =
+        true;
+
+      this.originalStartNewGame =
+        this.game.startNewGame.bind(
+          this.game
+        );
+
+      this.game.startNewGame =
+        () => {
+          this.resetPrologueState();
+
+          this.game.audio?.click();
+
+          this.ui.transition(
+            () => {
+              this.ui.showScreen(
+                'screenGame'
+              );
+
+              this.narrative.goto(
+                'p00_operation'
+              );
+            }
+          );
+
+          this.logger.info(
+            'Novo jogo iniciado diretamente no Prólogo.'
+          );
+        };
+    }
+
+    /* =======================================================================
+       PATCH DO CARREGAMENTO
+       ======================================================================= */
+
+    patchContinue() {
+      if (
+        this.game.__prologueContinuePatched
+      ) {
+        return;
+      }
+
+      this.game.__prologueContinuePatched =
+        true;
+
+      this.originalContinueGame =
+        this.game.continueGame.bind(
+          this.game
+        );
+
+      this.game.continueGame =
+        () => {
+          const loaded =
+            this.game.save.load();
+
+          if (!loaded) {
+            return false;
+          }
+
+          const current =
+            this.state.get(
+              'narrative.currentScene'
+            );
+
+          const prologueComplete =
+            this.state.get(
+              'prologue.completed'
+            );
+
+          if (
+            !prologueComplete
+          ) {
+            this.ui.transition(
+              () => {
+                this.ui.showScreen(
+                  'screenGame'
+                );
+
+                this.narrative.goto(
+                  this.isPrologueScene(
+                    current
+                  )
+                    ? current
+                    : 'p00_operation'
+                );
+              }
+            );
+
+            return true;
+          }
+
+          this.resumeAfterPrologue(
+            current
+          );
+
+          return true;
+        };
+    }
+
+    /* =======================================================================
+       PATCH NARRATIVE
+       ======================================================================= */
+
+    patchNarrative() {
+      if (
+        this.narrative.__prologuePatched
+      ) {
+        return;
+      }
+
+      this.narrative.__prologuePatched =
+        true;
+
+      this.originalGoto =
+        this.narrative.goto.bind(
+          this.narrative
+        );
+
+      this.originalSelectChoice =
+        this.narrative.selectChoiceById.bind(
+          this.narrative
+        );
 
       /*
-       * CONTROLE DE TRANSAÇÃO DAS ESCOLHAS
+       * Novo goto.
        */
-      this.choiceLocked =
-        false;
-
-      this.selectingChoice =
-        false;
-
-      this.choiceTransaction =
-        0;
-    }
-
-    renderCinematic() {
-      const index =
-        clamp(
-          this.state.get(
-            'narrative.cinematicIndex'
-          ),
-          0,
-          CINEMATICS.length -
-            1
-        );
-
-      const cinematic =
-        CINEMATICS[
-          index
-        ];
-
-      const title =
-        byId(
-          'cinematicTitle'
-        );
-
-      const text =
-        byId(
-          'cinematicText'
-        );
-
-      const counter =
-        byId(
-          'cinematicSceneIndex'
-        );
-
-      const act =
-        byId(
-          'cinematicActLabel'
-        );
-
-      const previous =
-        byId(
-          'cinematicPrevious'
-        );
-
-      const next =
-        byId(
-          'cinematicNext'
-        );
-
-      if (title) {
-        title.textContent =
-          cinematic.title;
-      }
-
-      if (text) {
-        text.textContent =
-          cinematic.text;
-      }
-
-      if (counter) {
-        counter.textContent =
-          `${String(
-            index + 1
-          ).padStart(
-            2,
-            '0'
-          )} / ${String(
-            CINEMATICS.length
-          ).padStart(
-            2,
-            '0'
-          )}`;
-      }
-
-      if (act) {
-        act.textContent =
-          'PRÓLOGO';
-      }
-
-      if (previous) {
-        previous.disabled =
-          index <=
-          0;
-      }
-
-      if (next) {
-        next.textContent =
-          index >=
-          CINEMATICS.length -
-            1
-            ? 'ENTRAR NA CRÔNICA'
-            : 'CONTINUAR';
-      }
-    }
-
-    nextCinematic() {
-      this.audio.click();
-
-      const index =
-        Number(
-          this.state.get(
-            'narrative.cinematicIndex'
-          )
-        ) || 0;
-
-      if (
-        index >=
-        CINEMATICS.length -
-          1
-      ) {
-        this.ui.transition(
-          () => {
-            this.ui.showScreen(
-              'screenGame'
-            );
-
-            this.goto(
-              this.state.get(
-                'narrative.currentScene'
-              ) ||
-                'g_intro'
+      this.narrative.goto =
+        sceneId => {
+          if (
+            this.isPrologueScene(
+              sceneId
+            )
+          ) {
+            return this.gotoPrologueScene(
+              sceneId
             );
           }
-        );
 
-        return;
-      }
+          return this.originalGoto(
+            sceneId
+          );
+        };
 
-      this.state.set(
-        'narrative.cinematicIndex',
-        index + 1,
-        'cinematic.next'
-      );
+      /*
+       * Nova seleção de escolha.
+       */
+      this.narrative.selectChoiceById =
+        choiceId => {
+          if (
+            this.isPrologueScene(
+              this.narrative.current?.id ||
+                this.state.get(
+                  'narrative.currentScene'
+                )
+            )
+          ) {
+            return this.selectPrologueChoice(
+              choiceId
+            );
+          }
 
-      this.renderCinematic();
+          return this.originalSelectChoice(
+            choiceId
+          );
+        };
     }
 
-    prevCinematic() {
-      const index =
-        Number(
-          this.state.get(
-            'narrative.cinematicIndex'
-          )
-        ) || 0;
+    /* =======================================================================
+       DETECÇÃO DE CENA
+       ======================================================================= */
 
-      if (
-        index <=
-        0
-      ) {
-        return;
-      }
-
-      this.audio.click();
-
-      this.state.set(
-        'narrative.cinematicIndex',
-        index - 1,
-        'cinematic.prev'
-      );
-
-      this.renderCinematic();
-    }
-
-    goto(
+    isPrologueScene(
       sceneId
     ) {
-      const safeId =
-        SCENES[
-          sceneId
-        ]
-          ? sceneId
-          : 'g_intro';
+      return safe(
+        sceneId
+      ).startsWith(
+        'p'
+      ) &&
+      /^p\d{2}_/.test(
+        safe(sceneId)
+      );
+    }
 
-      const scene =
-        SCENES[
-          safeId
-        ];
-
-      const previousId =
+    getCurrentScene() {
+      const id =
         this.state.get(
           'narrative.currentScene'
         );
 
-      /*
-       * Nova cena.
-       */
-      this.current =
+      return (
+        PROLOGUE_SCENES[
+          id
+        ] ||
+        null
+      );
+    }
+
+    /* =======================================================================
+       RESET
+       ======================================================================= */
+
+    resetPrologueState() {
+      ensurePrologueState(
+        this.game
+      );
+
+      this.state.set(
+        'prologue',
         {
-          ...scene,
-          id:
-            safeId
-        };
+          active:
+            true,
+
+          completed:
+            false,
+
+          tutorialStep:
+            0,
+
+          explorationUnlocked:
+            false,
+
+          explorationComplete:
+            false,
+
+          objective:
+            'Entender por que você foi escolhido.',
+
+          visitedPOIs:
+            [],
+
+          discoveries:
+            [],
+
+          investigations:
+            [],
+
+          choices:
+            [],
+
+          briefingComplete:
+            false,
+
+          missionAccepted:
+            false,
+
+          missionQuestioned:
+            false,
+
+          missionRefused:
+            false,
+
+          civilianContact:
+            false,
+
+          cityObserved:
+            false,
+
+          cronosObserved:
+            false,
+
+          finalDecision:
+            null,
+
+          transitionReady:
+            false
+        },
+        'prologue.reset'
+      );
+
+      /*
+       * Algumas variáveis narrativas precisam
+       * ser limpas para que um novo jogo nunca
+       * herde escolhas antigas.
+       */
+      const flags =
+        this.state.get(
+          'narrative.flags'
+        ) || {};
+
+      const preserved =
+        {};
+
+      /*
+       * Mantemos somente flags que pertençam
+       * explicitamente a sistemas externos.
+       */
+      for (
+        const [
+          key,
+          value
+        ] of Object.entries(
+          flags
+        )
+      ) {
+        if (
+          key.startsWith(
+            'external_'
+          )
+        ) {
+          preserved[key] =
+            value;
+        }
+      }
+
+      this.state.set(
+        'narrative.flags',
+        preserved,
+        'prologue.flags.reset'
+      );
+
+      this.state.set(
+        'narrative.choices',
+        [],
+        'prologue.choices.reset'
+      );
+
+      this.narrative.current =
+        null;
+
+      this.narrative.typing =
+        false;
+
+      this.narrative.choiceLocked =
+        false;
+
+      this.narrative.selectingChoice =
+        false;
+
+      this.exploration.active =
+        false;
+
+      this.exploration.locked =
+        false;
+    }
+
+    /* =======================================================================
+       CENA
+       ======================================================================= */
+
+    gotoPrologueScene(
+      sceneId
+    ) {
+      const scene =
+        PROLOGUE_SCENES[
+          sceneId
+        ];
+
+      if (!scene) {
+        this.logger.error(
+          'Cena do Prólogo inexistente',
+          sceneId
+        );
+
+        return false;
+      }
 
       /*
        * Cancela digitação anterior.
        */
       clearTimeout(
-        this.timer
+        this.narrative.timer
       );
 
-      this.typing =
+      this.narrative.typing =
         false;
 
+      this.narrative.current =
+        {
+          ...scene,
+          id:
+            sceneId
+        };
+
       /*
-       * INICIA UMA NOVA TRANSAÇÃO DE ESCOLHA.
+       * Nova transação.
        */
-      this.choiceTransaction +=
+      this.narrative.choiceTransaction +=
         1;
 
-      this.choiceLocked =
+      this.narrative.choiceLocked =
         false;
 
-      this.selectingChoice =
+      this.narrative.selectingChoice =
         false;
 
       /*
-       * Estado da narrativa.
+       * Estado.
        */
       this.state.set(
         'narrative.currentScene',
-        safeId,
-        'narrative.goto'
+        sceneId,
+        'prologue.goto'
       );
 
-      this.state.increment(
-        'statistics.sceneChanges',
-        1,
-        'narrative.goto'
+      this.state.set(
+        'phase',
+        'game',
+        'prologue.phase'
+      );
+
+      this.state.set(
+        'world.location',
+        scene.location ||
+          'mega_city',
+
+        'prologue.location'
+      );
+
+      this.state.set(
+        'world.act',
+        'PRÓLOGO',
+
+        'prologue.act'
       );
 
       /*
-       * Cenas vistas.
+       * Marca cena.
        */
       const seen =
         this.state.get(
@@ -4591,25 +2646,18 @@
 
       if (
         !seen.includes(
-          safeId
+          sceneId
         )
       ) {
         this.state.set(
           'narrative.seenScenes',
           [
             ...seen,
-            safeId
+            sceneId
           ],
-          'narrative.scene.seen'
+          'prologue.scene.seen'
         );
       }
-
-      /*
-       * Localização.
-       */
-      this.applyLocation(
-        scene.location
-      );
 
       /*
        * Efeitos de entrada.
@@ -4619,176 +2667,69 @@
       );
 
       /*
-       * Header do diálogo.
+       * Interface.
        */
-      this.renderDialogueHeader(
+      this.renderSceneHeader(
         scene
       );
 
-      /*
-       * ESCOLHAS PRIMEIRO.
-       *
-       * Isso é importante porque o botão
-       * já fica associado ao ID correto
-       * antes de qualquer interação.
-       */
       this.renderChoices(
         scene
       );
 
-      /*
-       * Texto.
-       */
       this.typeText(
         scene.text
       );
 
       /*
-       * Render.
+       * Tela.
+       */
+      this.ui.showScreen(
+        'screenGame'
+      );
+
+      /*
+       * Exploração.
+       */
+      if (
+        sceneId ===
+        'p10_exploration'
+      ) {
+        this.exploration.start();
+      } else {
+        this.exploration.stop();
+      }
+
+      /*
+       * Atualização visual.
        */
       this.ui.render();
 
-      /*
-       * Evento.
-       */
+      this.game.visualLab?.refresh(
+        true
+      );
+
       this.bus.emit(
         'scene:changed',
         {
           id:
-            safeId,
+            sceneId,
 
-          previousId,
+          scene,
 
-          scene
+          previousId:
+            null
         }
       );
+
+      return true;
     }
 
-    applyLocation(
-      locationId
-    ) {
-      if (
-        !locationId ||
-        !LOCATIONS[
-          locationId
-        ]
-      ) {
-        return;
-      }
+    /* =======================================================================
+       HEADER
+       ======================================================================= */
 
-      const discovered =
-        this.state.get(
-          'world.discovered'
-        ) || [];
-
-      if (
-        !discovered.includes(
-          locationId
-        )
-      ) {
-        this.state.set(
-          'world.discovered',
-          [
-            ...discovered,
-            locationId
-          ],
-          'world.discover'
-        );
-      }
-
-      const visited =
-        this.state.get(
-          'world.visited'
-        ) || [];
-
-      if (
-        !visited.includes(
-          locationId
-        )
-      ) {
-        this.state.set(
-          'world.visited',
-          [
-            ...visited,
-            locationId
-          ],
-          'world.visit'
-        );
-      }
-
-      this.state.set(
-        'world.location',
-        locationId,
-        'narrative.location'
-      );
-
-      this.state.set(
-        'world.act',
-        LOCATIONS[
-          locationId
-        ].act,
-
-        'narrative.location'
-      );
-
-      this.state.set(
-        'world.era',
-        LOCATIONS[
-          locationId
-        ].era,
-
-        'narrative.location'
-      );
-    }
-
-    applyOnEnter(
-      data
-    ) {
-      if (!data) {
-        return;
-      }
-
-      if (
-        data.codex
-      ) {
-        this.codex.unlock(
-          data.codex
-        );
-      }
-
-      if (
-        data.missionUnlock
-      ) {
-        this.missions.unlock(
-          data.missionUnlock
-        );
-      }
-
-      if (
-        data.missionProgress
-      ) {
-        const [
-          missionId,
-          amount
-        ] =
-          data.missionProgress;
-
-        this.missions.progress(
-          missionId,
-          amount
-        );
-      }
-
-      if (
-        data.missionComplete
-      ) {
-        this.missions.complete(
-          data.missionComplete
-        );
-      }
-    }
-
-    renderDialogueHeader(
+    renderSceneHeader(
       scene
     ) {
       const speaker =
@@ -4806,42 +2747,145 @@
           'dialogueType'
         );
 
-      if (speaker) {
+      if (
+        speaker
+      ) {
         speaker.textContent =
-          safeText(
-            scene.speaker
-          );
+          scene.speaker;
       }
 
-      if (role) {
+      if (
+        role
+      ) {
         role.textContent =
-          safeText(
-            scene.role
-          );
+          scene.role;
       }
 
-      if (type) {
+      if (
+        type
+      ) {
         type.textContent =
-          safeText(
-            scene.type
-          );
+          scene.type;
+      }
+
+      const phase =
+        byId(
+          'phaseLabel'
+        );
+
+      if (
+        phase
+      ) {
+        phase.textContent =
+          `PRÓLOGO // ${scene.type}`;
+      }
+
+      const act =
+        byId(
+          'locationAct'
+        );
+
+      if (
+        act
+      ) {
+        act.textContent =
+          'PRÓLOGO';
+      }
+
+      const era =
+        byId(
+          'eraValue'
+        );
+
+      if (
+        era
+      ) {
+        era.textContent =
+          'FUTURO';
       }
     }
+
+    /* =======================================================================
+       ENTRADA
+       ======================================================================= */
+
+    applyOnEnter(
+      data
+    ) {
+      if (!data) {
+        return;
+      }
+
+      if (
+        data.codex &&
+        this.game.codex
+      ) {
+        this.game.codex.unlock(
+          data.codex
+        );
+      }
+
+      if (
+        data.prologueFlag
+      ) {
+        this.state.set(
+          `narrative.flags.${data.prologueFlag}`,
+          true,
+          'prologue.onEnter.flag'
+        );
+      }
+
+      if (
+        data.prologueExploration
+      ) {
+        this.state.set(
+          'prologue.objective',
+          'Observe o mundo antes de aceitar a missão.',
+          'prologue.objective'
+        );
+      }
+
+      if (
+        data.prologueExplorationComplete
+      ) {
+        this.state.set(
+          'prologue.objective',
+          'Retorne ao Complexo Cronos e receba o briefing final.',
+          'prologue.objective'
+        );
+      }
+
+      if (
+        data.missionBriefingComplete
+      ) {
+        this.state.set(
+          'prologue.briefingComplete',
+          true,
+          'prologue.briefing'
+        );
+      }
+
+      if (
+        data.prologueReady
+      ) {
+        this.state.set(
+          'prologue.transitionReady',
+          true,
+          'prologue.transition.ready'
+        );
+      }
+    }
+
+    /* =======================================================================
+       TEXTO
+       ======================================================================= */
 
     typeText(
       text
     ) {
       clearTimeout(
-        this.timer
+        this.narrative.timer
       );
-
-      this.fullText =
-        safeText(
-          text
-        );
-
-      this.charIndex =
-        0;
 
       const output =
         byId(
@@ -4856,6 +2900,14 @@
       if (!output) {
         return;
       }
+
+      this.narrative.fullText =
+        safe(
+          text
+        );
+
+      this.narrative.charIndex =
+        0;
 
       output.textContent =
         '';
@@ -4876,14 +2928,13 @@
 
       if (
         fast ||
-        reduced ||
-        !this.fullText.length
+        reduced
       ) {
-        this.typing =
+        this.narrative.typing =
           false;
 
         output.textContent =
-          this.fullText;
+          this.narrative.fullText;
 
         cursor?.classList.remove(
           'active'
@@ -4892,7 +2943,7 @@
         return;
       }
 
-      this.typing =
+      this.narrative.typing =
         true;
 
       cursor?.classList.add(
@@ -4900,42 +2951,35 @@
       );
 
       const speed =
-        fast
-          ? 3
-          : 16;
-
-      const step =
-        fast
-          ? 5
-          : 1;
+        15;
 
       const tick =
         () => {
           if (
-            !this.typing
+            !this.narrative.typing
           ) {
             return;
           }
 
-          this.charIndex =
+          this.narrative.charIndex =
             Math.min(
-              this.fullText.length,
+              this.narrative.fullText.length,
 
-              this.charIndex +
-                step
+              this.narrative.charIndex +
+                1
             );
 
           output.textContent =
-            this.fullText.slice(
+            this.narrative.fullText.slice(
               0,
-              this.charIndex
+              this.narrative.charIndex
             );
 
           if (
-            this.charIndex >=
-            this.fullText.length
+            this.narrative.charIndex >=
+            this.narrative.fullText.length
           ) {
-            this.typing =
+            this.narrative.typing =
               false;
 
             cursor?.classList.remove(
@@ -4945,7 +2989,7 @@
             return;
           }
 
-          this.timer =
+          this.narrative.timer =
             setTimeout(
               tick,
               speed
@@ -4957,111 +3001,15 @@
       this.state.increment(
         'statistics.dialogues',
         1,
-        'narrative.dialogue'
+        'prologue.dialogue'
       );
     }
 
-    skipTyping() {
-      if (
-        !this.typing
-      ) {
-        return;
-      }
+    /* =======================================================================
+       ESCOLHAS
+       ======================================================================= */
 
-      clearTimeout(
-        this.timer
-      );
-
-      this.typing =
-        false;
-
-      const output =
-        byId(
-          'dialogueText'
-        );
-
-      if (output) {
-        output.textContent =
-          this.fullText;
-      }
-
-      byId(
-        'typingCursor'
-      )?.classList.remove(
-        'active'
-      );
-
-      this.audio.click();
-    }
-
-    continue() {
-      if (
-        this.typing
-      ) {
-        this.skipTyping();
-        return;
-      }
-
-      const choices =
-        this.availableChoices(
-          this.current
-        );
-
-      if (
-        choices.length >
-        0
-      ) {
-        this.ui.notify(
-          'Escolha necessária',
-          'Selecione uma resposta antes de continuar.',
-          'warning'
-        );
-
-        this.audio.alert();
-
-        return;
-      }
-
-      const next =
-        this.current?.next;
-
-      if (!next) {
-        this.ui.notify(
-          'Cena concluída',
-          'Este segmento da crônica terminou.',
-          'info'
-        );
-
-        return;
-      }
-
-      if (
-        !SCENES[
-          next
-        ]
-      ) {
-        this.logger.error(
-          'Próxima cena inexistente',
-          next
-        );
-
-        this.ui.notify(
-          'Erro narrativo',
-          'A próxima cena não foi encontrada.',
-          'error'
-        );
-
-        return;
-      }
-
-      this.audio.confirm();
-
-      this.goto(
-        next
-      );
-    }
-
-    availableChoices(
+    getAvailableChoices(
       scene
     ) {
       if (
@@ -5073,143 +3021,7 @@
         return [];
       }
 
-      const taken =
-        this.state.get(
-          'narrative.choices'
-        ) || [];
-
-      return scene.choices.filter(
-        choice => {
-          if (
-            !choice ||
-            !choice.id
-          ) {
-            return false;
-          }
-
-          if (
-            choice.once &&
-            taken.includes(
-              choice.id
-            )
-          ) {
-            return false;
-          }
-
-          return this.checkConditions(
-            choice.conditions
-          );
-        }
-      );
-    }
-
-    checkConditions(
-      condition
-    ) {
-      if (!condition) {
-        return true;
-      }
-
-      if (
-        condition.flag
-      ) {
-        const value =
-          Boolean(
-            this.state.get(
-              `narrative.flags.${condition.flag}`
-            )
-          );
-
-        if (!value) {
-          return false;
-        }
-      }
-
-      if (
-        condition.minHope !=
-        null
-      ) {
-        const hope =
-          Number(
-            this.state.get(
-              'player.stats.hope'
-            )
-          ) || 0;
-
-        if (
-          hope <
-          Number(
-            condition.minHope
-          )
-        ) {
-          return false;
-        }
-      }
-
-      if (
-        condition.minFreedom !=
-        null
-      ) {
-        const freedom =
-          Number(
-            this.state.get(
-              'player.stats.freedom'
-            )
-          ) || 0;
-
-        if (
-          freedom <
-          Number(
-            condition.minFreedom
-          )
-        ) {
-          return false;
-        }
-      }
-
-      if (
-        condition.minControl !=
-        null
-      ) {
-        const control =
-          Number(
-            this.state.get(
-              'player.stats.control'
-            )
-          ) || 0;
-
-        if (
-          control <
-          Number(
-            condition.minControl
-          )
-        ) {
-          return false;
-        }
-      }
-
-      if (
-        condition.minTemporal !=
-        null
-      ) {
-        const temporal =
-          Number(
-            this.state.get(
-              'player.stats.temporal'
-            )
-          ) || 0;
-
-        if (
-          temporal <
-          Number(
-            condition.minTemporal
-          )
-        ) {
-          return false;
-        }
-      }
-
-      return true;
+      return scene.choices;
     }
 
     renderChoices(
@@ -5222,54 +3034,21 @@
 
       if (!container) {
         this.logger.error(
-          'choiceContainer não encontrado'
+          'choiceContainer não encontrado.'
         );
 
         return;
       }
 
-      /*
-       * REMOVE OS BOTÕES ANTIGOS
-       */
       container.replaceChildren();
 
-      /*
-       * NOVA JANELA DE ESCOLHA
-       */
-      this.choiceLocked =
-        false;
-
-      this.selectingChoice =
-        false;
-
-      container.dataset.sceneId =
-        safeText(
-          this.state.get(
-            'narrative.currentScene'
-          )
-        );
-
       const choices =
-        this.availableChoices(
+        this.getAvailableChoices(
           scene
         );
 
-      container.setAttribute(
-        'aria-live',
-        'polite'
-      );
-
-      container.setAttribute(
-        'role',
-        'group'
-      );
-
-      container.setAttribute(
-        'aria-label',
-        choices.length
-          ? 'Escolhas disponíveis'
-          : 'Nenhuma escolha disponível'
-      );
+      container.dataset.sceneId =
+        scene.id;
 
       if (
         choices.length ===
@@ -5284,18 +3063,16 @@
           index
         ) => {
           const button =
-            document.createElement(
-              'button'
+            create(
+              'button',
+              'choice-button'
             );
 
           button.type =
             'button';
 
-          button.className =
-            'choice-button';
-
           button.dataset.choiceId =
-            safeText(
+            safe(
               choice.id
             );
 
@@ -5303,14 +3080,6 @@
             String(
               index
             );
-
-          button.disabled =
-            false;
-
-          button.setAttribute(
-            'aria-disabled',
-            'false'
-          );
 
           button.setAttribute(
             'aria-label',
@@ -5323,8 +3092,15 @@
           );
 
           const number =
-            document.createElement(
-              'span'
+            create(
+              'span',
+              '',
+              String(
+                index + 1
+              ).padStart(
+                2,
+                '0'
+              )
             );
 
           number.setAttribute(
@@ -5332,27 +3108,16 @@
             'true'
           );
 
-          number.textContent =
-            String(
-              index + 1
-            ).padStart(
-              2,
-              '0'
-            );
-
-          const text =
-            document.createElement(
-              'strong'
-            );
-
-          text.textContent =
-            safeText(
+          const label =
+            create(
+              'strong',
+              '',
               choice.text
             );
 
           button.append(
             number,
-            text
+            label
           );
 
           container.appendChild(
@@ -5362,143 +3127,60 @@
       );
     }
 
-    /*
-     * ========================================================================
-     * SELEÇÃO ROBUSTA DA ESCOLHA
-     * ========================================================================
-     *
-     * Toda decisão passa por este método.
-     *
-     * Nunca executar uma escolha simplesmente
-     * chamando executeChoice() diretamente.
-     *
-     * ========================================================================
-     */
+    /* =======================================================================
+       EXECUÇÃO DA ESCOLHA
+       ======================================================================= */
 
-    selectChoiceById(
+    selectPrologueChoice(
       choiceId
     ) {
-      const normalizedId =
-        safeText(
-          choiceId
-        ).trim();
-
       if (
-        !normalizedId
+        this.narrative.choiceLocked
       ) {
-        return false;
-      }
-
-      /*
-       * Proteção contra duplo clique.
-       */
-      if (
-        this.choiceLocked ||
-        this.selectingChoice
-      ) {
-        return false;
-      }
-
-      /*
-       * Cena realmente ativa.
-       */
-      const sceneId =
-        safeText(
-          this.state.get(
-            'narrative.currentScene'
-          )
-        );
-
-      if (!sceneId) {
-        this.logger.error(
-          'Nenhuma cena narrativa ativa'
-        );
-
         return false;
       }
 
       const scene =
-        SCENES[
-          sceneId
-        ];
+        this.getCurrentScene();
 
       if (!scene) {
-        this.logger.error(
-          'Cena narrativa não encontrada',
-          sceneId
+        return false;
+      }
+
+      const choice =
+        scene.choices?.find(
+          item =>
+            String(
+              item.id
+            ) ===
+            String(
+              choiceId
+            )
+        );
+
+      if (!choice) {
+        this.logger.warn(
+          'Escolha inexistente no Prólogo',
+          choiceId
         );
 
         return false;
       }
 
+      this.narrative.choiceLocked =
+        true;
+
+      this.narrative.selectingChoice =
+        true;
+
       /*
-       * Garante que o botão pertence à cena atual.
+       * Desabilita todos.
        */
       const container =
         byId(
           'choiceContainer'
         );
 
-      if (
-        container &&
-        container.dataset.sceneId !==
-          sceneId
-      ) {
-        this.logger.warn(
-          'Container de escolhas desatualizado',
-
-          `${container.dataset.sceneId} -> ${sceneId}`
-        );
-
-        this.renderChoices(
-          scene
-        );
-
-        return false;
-      }
-
-      /*
-       * Procura somente entre escolhas realmente disponíveis.
-       */
-      const choices =
-        this.availableChoices(
-          scene
-        );
-
-      const choice =
-        choices.find(
-          item =>
-            String(
-              item.id
-            ) ===
-            normalizedId
-        );
-
-      if (!choice) {
-        this.logger.warn(
-          'Escolha inválida ou indisponível',
-
-          `${normalizedId} @ ${sceneId}`
-        );
-
-        return false;
-      }
-
-      /*
-       * Inicia transação.
-       */
-      const transaction =
-        ++this.choiceTransaction;
-
-      this.choiceLocked =
-        true;
-
-      this.selectingChoice =
-        true;
-
-      /*
-       * Desabilita os botões imediatamente.
-       */
       qsa(
         '.choice-button',
         container || document
@@ -5516,7 +3198,9 @@
             String(
               button.dataset.choiceId
             ) ===
-            normalizedId
+            String(
+              choice.id
+            )
           ) {
             button.classList.add(
               'choice-selected'
@@ -5527,74 +3211,103 @@
 
       try {
         /*
-         * Proteção contra mudança de cena
-         * entre o começo e a execução.
+         * Texto instantâneo antes da escolha.
          */
         if (
-          transaction !==
-          this.choiceTransaction
+          this.narrative.typing
         ) {
-          throw new Error(
-            'Transação narrativa invalidada.'
-          );
+          this.skipTyping();
         }
 
-        const result =
-          this.executeChoice(
-            choice,
-            sceneId
+        this.game.audio?.choice();
+
+        /*
+         * APLICA EFEITOS.
+         */
+        this.applyChoiceEffects(
+          choice
+        );
+
+        /*
+         * REGISTRA ESCOLHA.
+         */
+        this.recordChoice(
+          choice
+        );
+
+        /*
+         * TRATAMENTO ESPECIAL.
+         */
+        this.handleSpecialChoice(
+          choice
+        );
+
+        /*
+         * DESTINO.
+         */
+        if (
+          choice.next
+        ) {
+          setTimeout(
+            () => {
+              this.narrative.choiceLocked =
+                false;
+
+              this.narrative.selectingChoice =
+                false;
+
+              this.narrative.goto(
+                choice.next
+              );
+            },
+            100
           );
 
-        return result;
+          return true;
+        }
+
+        /*
+         * FIM DO PRÓLOGO.
+         */
+        this.finishPrologue();
+
+        return true;
       } catch (
         error
       ) {
         this.logger.error(
-          `Falha na escolha ${normalizedId}`,
+          'Falha na escolha do Prólogo',
           error
         );
 
-        /*
-         * Só desbloqueia se ainda estivermos
-         * na mesma cena.
-         */
-        if (
-          safeText(
-            this.state.get(
-              'narrative.currentScene'
-            )
-          ) ===
-          sceneId
-        ) {
-          this.choiceLocked =
-            false;
+        this.narrative.choiceLocked =
+          false;
 
-          this.selectingChoice =
-            false;
+        this.narrative.selectingChoice =
+          false;
 
-          qsa(
-            '.choice-button',
-            container || document
-          ).forEach(
-            button => {
-              button.disabled =
-                false;
+        qsa(
+          '.choice-button',
+          container || document
+        ).forEach(
+          button => {
+            button.disabled =
+              false;
 
-              button.setAttribute(
-                'aria-disabled',
-                'false'
-              );
+            button.setAttribute(
+              'aria-disabled',
+              'false'
+            );
 
-              button.classList.remove(
-                'choice-selected'
-              );
-            }
-          );
-        }
+            button.classList.remove(
+              'choice-selected'
+            );
+          }
+        );
 
         this.ui.notify(
-          'Falha na decisão',
-          'A escolha não pôde ser processada. Nenhum progresso foi perdido.',
+          'Erro na decisão',
+          'A escolha não pôde ser processada.',
           'error'
         );
 
@@ -5602,185 +3315,119 @@
       }
     }
 
-    /*
-     * ========================================================================
-     * EXECUTA A ESCOLHA
-     * ========================================================================
-     */
+    /* =======================================================================
+       EFEITOS
+       ======================================================================= */
 
-    executeChoice(
-      choice,
-      sceneId
+    applyChoiceEffects(
+      choice
     ) {
-      if (!choice) {
-        return false;
-      }
+      const effects =
+        choice.effects ||
+        {};
 
-      /*
-       * Determina o próximo destino ANTES das mutações.
-       */
-      const destination =
-        choice.next ||
-        SCENES[
-          sceneId
-        ]?.next ||
-        null;
-
-      if (
-        destination &&
-        !SCENES[
-          destination
+      for (
+        const [
+          key,
+          value
         ]
+          of Object.entries(
+            effects
+          )
       ) {
-        throw new Error(
-          `Destino inexistente: ${destination}`
+        this.state.adjustStat(
+          key,
+          Number(
+            value
+          ) || 0,
+          `prologue.choice.${choice.id}`
         );
       }
 
-      /*
-       * Termina o texto se necessário.
-       */
-      if (
-        this.typing
+      const flags =
+        choice.flags ||
+        {};
+
+      for (
+        const [
+          key,
+          value
+        ]
+          of Object.entries(
+            flags
+          )
       ) {
-        this.skipTyping();
+        this.state.set(
+          `narrative.flags.${key}`,
+          value,
+          `prologue.choice.${choice.id}`
+        );
       }
+    }
 
-      this.audio.choice();
+    /* =======================================================================
+       HISTÓRICO
+       ======================================================================= */
 
-      /*
-       * ==============================================================
-       * APLICA TODAS AS CONSEQUÊNCIAS
-       * ==============================================================
-       */
+    recordChoice(
+      choice
+    ) {
+      const choices =
+        this.state.get(
+          'narrative.choices'
+        ) || [];
 
-      this.state.batch(
-        () => {
-          /*
-           * Efeitos estatísticos
-           */
-          const effects =
-            isObject(
-              choice.effects
-            )
-              ? choice.effects
-              : {};
+      this.state.set(
+        'narrative.choices',
+        [
+          ...choices,
+          choice.id
+        ],
+        `prologue.choice.${choice.id}`
+      );
 
-          for (
-            const [
-              key,
-              amount
-            ] of Object.entries(
-              effects
-            )
-          ) {
-            this.state.adjustStat(
-              key,
-              Number(
-                amount
-              ) || 0,
-              `choice.${choice.id}`
-            );
-          }
+      const prologueChoices =
+        this.state.get(
+          'prologue.choices'
+        ) || [];
 
-          /*
-           * Flags
-           */
-          const flags =
-            isObject(
-              choice.flags
-            )
-              ? choice.flags
-              : {};
+      this.state.set(
+        'prologue.choices',
+        [
+          ...prologueChoices,
+          choice.id
+        ],
+        `prologue.choice.history.${choice.id}`
+      );
 
-          for (
-            const [
-              key,
-              value
-            ] of Object.entries(
-              flags
-            )
-          ) {
-            this.state.set(
-              `narrative.flags.${key}`,
-              value,
-
-              `choice.${choice.id}`
-            );
-          }
-
-          /*
-           * Histórico da escolha
-           */
-          const choices =
-            this.state.get(
-              'narrative.choices'
-            ) || [];
-
-          this.state.set(
-            'narrative.choices',
-            [
-              ...choices,
-              choice.id
-            ],
-
-            `choice.${choice.id}`
-          );
-
-          /*
-           * Estatística
-           */
-          this.state.increment(
-            'statistics.choices',
-            1,
-
-            `choice.${choice.id}`
-          );
-        },
-
-        `choice.${choice.id}`
+      this.state.increment(
+        'statistics.choices',
+        1,
+        `prologue.choice.${choice.id}`
       );
 
       /*
-       * Códex
+       * Campaign Engine.
        */
-      if (
-        choice.codex
-      ) {
-        this.codex.unlock(
-          choice.codex
-        );
-      }
+      this.game.campaign?.campaign?.decisions?.record?.({
+        id:
+          `prologue_${choice.id}`,
 
-      /*
-       * Missões
-       */
-      if (
-        Array.isArray(
-          choice.missionProgress
-        )
-      ) {
-        const [
-          missionId,
-          amount
-        ] =
-          choice.missionProgress;
+        scene:
+          this.getCurrentScene()?.id,
 
-        this.missions.unlock(
-          missionId
-        );
+        text:
+          choice.text,
 
-        this.missions.progress(
-          missionId,
-          Number(
-            amount
-          ) || 0
-        );
-      }
+        metadata: {
+          type:
+            'narrative',
 
-      /*
-       * Evento global.
-       */
+          act:
+            PROLOGUE_ID
+        }
+      });
+
       this.bus.emit(
         'choice:selected',
         {
@@ -5788,1665 +3435,120 @@
             choice.id,
 
           scene:
-            sceneId,
+            this.getCurrentScene()?.id,
 
-          next:
-            destination
+          source:
+            'prologue'
         }
       );
-
-      /*
-       * Se não existir destino,
-       * encerra o segmento.
-       */
-      if (!destination) {
-        this.selectingChoice =
-          false;
-
-        this.choiceLocked =
-          false;
-
-        this.ui.notify(
-          'Decisão registrada',
-          'A escolha foi armazenada na crônica.',
-          'success'
-        );
-
-        return true;
-      }
-
-      /*
-       * CAMINHO PRINCIPAL:
-       * próxima cena.
-       */
-      this.goto(
-        destination
-      );
-
-      /*
-       * goto() já abriu uma nova transação.
-       */
-      this.selectingChoice =
-        false;
-
-      this.choiceLocked =
-        false;
-
-      /*
-       * Autosave será disparado
-       * pelo StateManager/EventBus.
-       */
-      return true;
     }
 
-    selectChoiceByIndex(
-      index
+    /* =======================================================================
+       ESCOLHAS ESPECIAIS
+       ======================================================================= */
+
+    handleSpecialChoice(
+      choice
     ) {
-      const choices =
-        this.availableChoices(
-          this.current
-        );
-
-      if (
-        !Number.isInteger(
-          index
-        )
-      ) {
-        return false;
-      }
-
-      const choice =
-        choices[
-          index
-        ];
-
-      if (!choice) {
-        return false;
-      }
-
-      return this.selectChoiceById(
+      switch (
         choice.id
-      );
-    }
-  }
-
-  /* ==========================================================================
-     SETTINGS MANAGER
-     ========================================================================== */
-
-  class SettingsManager {
-    constructor(
-      state,
-      bus,
-      ui,
-      logger
-    ) {
-      this.state =
-        state;
-
-      this.bus =
-        bus;
-
-      this.ui =
-        ui;
-
-      this.logger =
-        logger;
-    }
-
-    load() {
-      try {
-        const raw =
-          localStorage.getItem(
-            SETTINGS_KEY
-          );
-
-        if (!raw) {
-          return;
-        }
-
-        const settings =
-          JSON.parse(
-            raw
-          );
-
-        if (
-          !isObject(
-            settings
-          )
-        ) {
-          return;
-        }
-
-        this.state.patch(
-          'settings',
-          settings,
-          'settings.load'
-        );
-      } catch (
-        error
       ) {
-        this.logger.warn(
-          'Configurações anteriores ignoradas',
-          error
-        );
+
+        case 'ask_reason':
+
+          this.ui.notify(
+            'Registro incompleto',
+            'A organização não respondeu. O silêncio parece deliberado.',
+            'warning'
+          );
+
+          break;
+
+        case 'refuse_extraction':
+
+          this.ui.notify(
+            'Extração mantida',
+            'A operação tinha autorização superior. Sua recusa não alterou o resultado.',
+            'info'
+          );
+
+          break;
+
+        case 'reject_mission':
+
+          this.state.set(
+            'prologue.missionRefused',
+            true,
+            'prologue.mission.refused'
+          );
+
+          break;
+
+        case 'question_mission':
+
+          this.state.set(
+            'prologue.missionQuestioned',
+            true,
+            'prologue.mission.questioned'
+          );
+
+          break;
+
+        case 'accept_mission':
+
+          this.state.set(
+            'prologue.missionAccepted',
+            true,
+            'prologue.mission.accepted'
+          );
+
+          break;
+
+        case 'yes_save_world':
+
+          this.state.set(
+            'prologue.finalDecision',
+            'yes_save_world',
+            'prologue.final.question'
+          );
+
+          break;
+
+        case 'yes_but':
+
+          this.state.set(
+            'prologue.finalDecision',
+            'yes_but',
+            'prologue.final.question'
+          );
+
+          break;
+
+        case 'not_sure':
+
+          this.state.set(
+            'prologue.finalDecision',
+            'not_sure',
+            'prologue.final.question'
+          );
+
+          break;
+
+        default:
+          break;
       }
     }
 
-    set(
-      key,
-      value
-    ) {
-      const allowed =
-        new Set([
-          'fastText',
-          'highContrast',
-          'reducedMotion',
-          'audio'
-        ]);
+    /* =======================================================================
+       DIGITAÇÃO
+       ======================================================================= */
 
+    skipTyping() {
       if (
-        !allowed.has(
-          key
-        )
+        !this.narrative.typing
       ) {
         return;
       }
-
-      this.state.set(
-        `settings.${key}`,
-        Boolean(
-          value
-        ),
-        'settings.change'
-      );
-
-      try {
-        localStorage.setItem(
-          SETTINGS_KEY,
-
-          JSON.stringify(
-            this.state.get(
-              'settings'
-            )
-          )
-        );
-      } catch (
-        error
-      ) {
-        this.logger.warn(
-          'Não foi possível salvar configurações',
-          error
-        );
-      }
-
-      this.bus.emit(
-        'settings:changed',
-        {
-          key,
-
-          value:
-            Boolean(
-              value
-            )
-        }
-      );
-
-      this.ui.render();
-    }
-  }
-
-  /* ==========================================================================
-     PARTICLE SYSTEM
-     ========================================================================== */
-
-  class ParticleSystem {
-    constructor(
-      state
-    ) {
-      this.state =
-        state;
-
-      this.container =
-        null;
-
-      this.timer =
-        null;
-    }
-
-    start() {
-      this.container =
-        byId(
-          'backgroundParticles'
-        );
-
-      if (!this.container) {
-        return;
-      }
-
-      this.stop();
-
-      if (
-        this.state.get(
-          'settings.reducedMotion'
-        )
-      ) {
-        return;
-      }
-
-      this.loop();
-    }
-
-    loop() {
-      this.spawn();
-
-      this.timer =
-        setTimeout(
-          () =>
-            this.loop(),
-          1100
-        );
-    }
-
-    spawn() {
-      if (!this.container) {
-        return;
-      }
-
-      const particle =
-        document.createElement(
-          'i'
-        );
-
-      particle.className =
-        'jc-particle';
-
-      particle.style.setProperty(
-        '--x',
-        `${Math.random() * 100}%`
-      );
-
-      particle.style.setProperty(
-        '--size',
-        `${1 + Math.random() * 3}px`
-      );
-
-      particle.style.setProperty(
-        '--dur',
-        `${5 + Math.random() * 7}s`
-      );
-
-      particle.style.setProperty(
-        '--delay',
-        `${Math.random() * 1.5}s`
-      );
-
-      this.container.appendChild(
-        particle
-      );
-
-      setTimeout(
-        () =>
-          particle.remove(),
-        15000
-      );
-    }
-
-    stop() {
-      clearTimeout(
-        this.timer
-      );
-
-      this.timer =
-        null;
-    }
-  }
-
-  /* ==========================================================================
-     VISUAL LAB
-     ========================================================================== */
-
-  class VisualLab {
-    constructor(
-      state,
-      bus,
-      logger
-    ) {
-      this.state =
-        state;
-
-      this.bus =
-        bus;
-
-      this.logger =
-        logger;
-
-      this.canvas =
-        null;
-
-      this.context =
-        null;
-
-      this.mode =
-        'process';
-
-      this.initialized =
-        false;
-
-      this.frame =
-        null;
-
-      this.lastRefresh =
-        0;
-    }
-
-    init() {
-      this.canvas =
-        byId(
-          'visualLabCanvas'
-        );
-
-      if (this.canvas) {
-        this.context =
-          this.canvas.getContext(
-            '2d'
-          );
-      }
-
-      this.initialized =
-        true;
-
-      this.resize();
-
-      window.addEventListener(
-        'resize',
-        () =>
-          this.resize()
-      );
-
-      this.refresh(
-        true
-      );
-    }
-
-    resize() {
-      if (
-        !this.canvas ||
-        !this.context
-      ) {
-        return;
-      }
-
-      const rect =
-        this.canvas.getBoundingClientRect();
-
-      const width =
-        Math.max(
-          300,
-          Math.floor(
-            rect.width ||
-              600
-          )
-        );
-
-      const height =
-        Math.max(
-          180,
-          Math.floor(
-            rect.height ||
-              260
-          )
-        );
-
-      const dpr =
-        Math.min(
-          window.devicePixelRatio ||
-            1,
-          2
-        );
-
-      this.canvas.width =
-        Math.floor(
-          width *
-            dpr
-        );
-
-      this.canvas.height =
-        Math.floor(
-          height *
-            dpr
-        );
-
-      this.context.setTransform(
-        dpr,
-        0,
-        0,
-        dpr,
-        0,
-        0
-      );
-
-      this.draw();
-    }
-
-    setMode(
-      mode
-    ) {
-      const allowed =
-        new Set([
-          'process',
-          'dom',
-          'css',
-          'js',
-          'system'
-        ]);
-
-      this.mode =
-        allowed.has(
-          mode
-        )
-          ? mode
-          : 'process';
-
-      qsa(
-        '.visual-lab-tab'
-      ).forEach(
-        tab => {
-          tab.classList.toggle(
-            'active',
-
-            (
-              tab.dataset.mode ||
-              'process'
-            ) ===
-              this.mode
-          );
-        }
-      );
-
-      this.refresh(
-        true
-      );
-    }
-
-    refresh(
-      force = false
-    ) {
-      if (
-        !this.initialized
-      ) {
-        return;
-      }
-
-      const now =
-        performance.now();
-
-      if (
-        !force &&
-        now -
-          this.lastRefresh <
-          30
-      ) {
-        return;
-      }
-
-      this.lastRefresh =
-        now;
-
-      this.updateDOM();
-
-      this.draw();
-    }
-
-    updateDOM() {
-      const flow =
-        this.logger.lastFlow;
-
-      const mapping = {
-        visualLabAction:
-          this.getActionLabel(),
-
-        visualLabTarget:
-          this.getTargetLabel(),
-
-        visualLabTimestamp:
-          new Date()
-            .toLocaleTimeString(
-              'pt-BR'
-            ),
-
-        visualLabEvent:
-          flow.event,
-
-        visualLabFunction:
-          flow.function,
-
-        visualLabState:
-          flow.state,
-
-        visualLabDomUpdate:
-          flow.dom,
-
-        visualLabResult:
-          flow.result,
-
-        visualLabFooterTarget:
-          this.getTargetLabel(),
-
-        visualLabObserverCount:
-          String(
-            this.logger.observerCount
-          ),
-
-        visualLabMutationCount:
-          String(
-            this.logger.mutationCount
-          ),
-
-        visualLabEventCount:
-          String(
-            this.logger.eventCount
-          )
-      };
-
-      for (
-        const [
-          id,
-          value
-        ] of Object.entries(
-          mapping
-        )
-      ) {
-        const node =
-          byId(
-            id
-          );
-
-        if (node) {
-          node.textContent =
-            safeText(
-              value
-            );
-        }
-      }
-
-      const context =
-        byId(
-          'visualLabContext'
-        );
-
-      if (context) {
-        context.textContent =
-          this.buildContext();
-      }
-
-      const tree =
-        byId(
-          'visualLabDomTree'
-        );
-
-      if (tree) {
-        tree.textContent =
-          this.buildDOMTree();
-      }
-
-      const metrics =
-        byId(
-          'visualLabCssMetrics'
-        );
-
-      if (metrics) {
-        metrics.textContent =
-          this.buildMetrics();
-      }
-
-      const log =
-        byId(
-          'visualLabJsLog'
-        );
-
-      if (log) {
-        log.textContent =
-          this.logger
-            .latest(9)
-            .map(
-              entry =>
-                `[${entry.time}] ${entry.level.toUpperCase()} — ${entry.message}`
-            )
-            .join(
-              '\n'
-            );
-      }
-
-      const tests =
-        byId(
-          'visualLabTests'
-        );
-
-      if (tests) {
-        tests.textContent =
-          this.buildTests();
-      }
-    }
-
-    getActionLabel() {
-      const labels = {
-        process:
-          'LIVE PROCESS // ENGINE',
-
-        dom:
-          'ANÁLISE // DOM',
-
-        css:
-          'ANÁLISE // CSS',
-
-        js:
-          'ANÁLISE // JAVASCRIPT',
-
-        system:
-          'ANÁLISE // SISTEMA'
-      };
-
-      return (
-        labels[
-          this.mode
-        ] ||
-        labels.process
-      );
-    }
-
-    getTargetLabel() {
-      return (
-        this.state.get(
-          'narrative.currentScene'
-        ) ||
-        'SYSTEM'
-      );
-    }
-
-    buildContext() {
-      const sceneId =
-        this.state.get(
-          'narrative.currentScene'
-        );
-
-      const scene =
-        SCENES[
-          sceneId
-        ];
-
-      if (!scene) {
-        return 'Nenhuma cena ativa.';
-      }
-
-      return [
-        `CENA: ${sceneId}`,
-        `ORADOR: ${scene.speaker}`,
-        `TIPO: ${scene.type}`,
-        `LOCAL: ${scene.location}`,
-        `ESCOLHAS: ${
-          scene.choices?.length ||
-          0
-        }`,
-        `FASE: ${
-          this.state.get(
-            'phase'
-          )
-        }`
-      ].join(
-        ' • '
-      );
-    }
-
-    buildDOMTree() {
-      return [
-        'DOCUMENT',
-
-        '├── HEADER',
-
-        '│   ├── BRAND',
-
-        '│   ├── STATUS',
-
-        '│   └── ACTIONS',
-
-        '├── MAIN',
-
-        '│   ├── TITLE',
-
-        '│   ├── CINEMATIC',
-
-        '│   └── GAME',
-
-        '│       ├── PLAYER HUD',
-
-        '│       ├── WORLD',
-
-        '│       ├── DIALOGUE',
-
-        '│       └── SYSTEM HUD',
-
-        '└── OVERLAYS'
-      ].join(
-        '\n'
-      );
-    }
-
-    buildMetrics() {
-      const sceneId =
-        this.state.get(
-          'narrative.currentScene'
-        );
-
-      const scene =
-        SCENES[
-          sceneId
-        ];
-
-      return [
-        'WIDTH       AUTO',
-
-        'HEIGHT      AUTO',
-
-        'DISPLAY     GRID',
-
-        `SCENE       ${sceneId}`,
-
-        `LOCATION    ${this.state.get(
-          'world.location'
-        )}`,
-
-        `CHOICES     ${
-          scene?.choices?.length ||
-          0
-        }`,
-
-        `TEMPORAL    ${
-          Math.round(
-            this.state.get(
-              'player.stats.temporal'
-            ) || 0
-          )
-        }%`
-      ].join(
-        '\n'
-      );
-    }
-
-    buildTests() {
-      const choice =
-        Boolean(
-          byId(
-            'choiceContainer'
-          )
-        );
-
-      const sceneId =
-        this.state.get(
-          'narrative.currentScene'
-        );
-
-      const scene =
-        Boolean(
-          SCENES[
-            sceneId
-          ]
-        );
-
-      const phase =
-        Boolean(
-          this.state.get(
-            'phase'
-          )
-        );
-
-      return [
-        `DOM         ${
-          choice
-            ? 'OK'
-            : 'FAIL'
-        }`,
-
-        `STATE       ${
-          phase
-            ? 'OK'
-            : 'FAIL'
-        }`,
-
-        `SCENE       ${
-          scene
-            ? 'OK'
-            : 'FAIL'
-        }`,
-
-        `CHOICES     ${
-          this.state.get(
-            'narrative.choices'
-          )?.length ||
-          0
-        }`,
-
-        `EVENTS      ${
-          this.logger.eventCount
-        }`
-      ].join(
-        '\n'
-      );
-    }
-
-    draw() {
-      if (
-        !this.canvas ||
-        !this.context
-      ) {
-        return;
-      }
-
-      const rect =
-        this.canvas.getBoundingClientRect();
-
-      const width =
-        Math.max(
-          300,
-          Math.floor(
-            rect.width ||
-              600
-          )
-        );
-
-      const height =
-        Math.max(
-          180,
-          Math.floor(
-            rect.height ||
-              260
-          )
-        );
-
-      const dpr =
-        Math.min(
-          window.devicePixelRatio ||
-            1,
-          2
-        );
-
-      this.context.setTransform(
-        dpr,
-        0,
-        0,
-        dpr,
-        0,
-        0
-      );
-
-      const ctx =
-        this.context;
-
-      ctx.clearRect(
-        0,
-        0,
-        width,
-        height
-      );
-
-      /*
-       * GRADE
-       */
-      ctx.strokeStyle =
-        'rgba(139,200,255,.16)';
-
-      ctx.lineWidth =
-        1;
-
-      for (
-        let x = 0;
-        x < width;
-        x += 32
-      ) {
-        ctx.beginPath();
-
-        ctx.moveTo(
-          x,
-          0
-        );
-
-        ctx.lineTo(
-          x,
-          height
-        );
-
-        ctx.stroke();
-      }
-
-      for (
-        let y = 0;
-        y < height;
-        y += 32
-      ) {
-        ctx.beginPath();
-
-        ctx.moveTo(
-          0,
-          y
-        );
-
-        ctx.lineTo(
-          width,
-          y
-        );
-
-        ctx.stroke();
-      }
-
-      /*
-       * NÓS DO FLUXO
-       */
-      const nodes = [
-        {
-          label:
-            'EVENT',
-
-          x:
-            width * 0.18,
-
-          y:
-            height * 0.48
-        },
-
-        {
-          label:
-            'STATE',
-
-          x:
-            width * 0.39,
-
-          y:
-            height * 0.32
-        },
-
-        {
-          label:
-            'DOM',
-
-          x:
-            width * 0.61,
-
-          y:
-            height * 0.66
-        },
-
-        {
-          label:
-            'RESULT',
-
-          x:
-            width * 0.82,
-
-          y:
-            height * 0.42
-        }
-      ];
-
-      /*
-       * CONEXÕES
-       */
-      ctx.strokeStyle =
-        'rgba(114,246,220,.34)';
-
-      ctx.lineWidth =
-        1.5;
-
-      for (
-        let i = 0;
-        i <
-        nodes.length -
-          1;
-        i += 1
-      ) {
-        ctx.beginPath();
-
-        ctx.moveTo(
-          nodes[i].x,
-          nodes[i].y
-        );
-
-        ctx.lineTo(
-          nodes[i + 1].x,
-          nodes[i + 1].y
-        );
-
-        ctx.stroke();
-      }
-
-      /*
-       * NÓS
-       */
-      nodes.forEach(
-        node => {
-          ctx.beginPath();
-
-          ctx.arc(
-            node.x,
-            node.y,
-            18,
-            0,
-            Math.PI * 2
-          );
-
-          ctx.fillStyle =
-            'rgba(114,246,220,.26)';
-
-          ctx.fill();
-
-          ctx.beginPath();
-
-          ctx.arc(
-            node.x,
-            node.y,
-            5,
-            0,
-            Math.PI * 2
-          );
-
-          ctx.fillStyle =
-            'rgba(240,250,255,.95)';
-
-          ctx.fill();
-
-          ctx.font =
-            '700 10px ui-monospace, monospace';
-
-          ctx.textAlign =
-            'center';
-
-          ctx.fillStyle =
-            'rgba(220,239,255,.82)';
-
-          ctx.fillText(
-            node.label,
-
-            node.x,
-
-            node.y + 31
-          );
-        }
-      );
-
-      /*
-       * TELEMETRIA
-       */
-      ctx.textAlign =
-        'left';
-
-      ctx.font =
-        '700 10px ui-monospace, monospace';
-
-      ctx.fillStyle =
-        'rgba(220,239,255,.72)';
-
-      const telemetry = [
-        `PHASE  ${safeText(
-          this.state.get(
-            'phase'
-          )
-        ).toUpperCase()}`,
-
-        `SCENE  ${safeText(
-          this.state.get(
-            'narrative.currentScene'
-          )
-        )}`,
-
-        `EVENTS ${this.logger.eventCount}`,
-
-        `MUT    ${this.logger.mutationCount}`,
-
-        `MODE   ${this.mode.toUpperCase()}`
-      ];
-
-      telemetry.forEach(
-        (
-          line,
-          index
-        ) => {
-          ctx.fillText(
-            line,
-            12,
-            18 +
-              index *
-                15
-          );
-        }
-      );
-
-      /*
-       * SCANNER
-       */
-      if (
-        !this.state.get(
-          'settings.reducedMotion'
-        )
-      ) {
-        const t =
-          performance.now() *
-          0.0005;
-
-        const scanX =
-          (
-            (
-              Math.sin(
-                t
-              ) +
-              1
-            ) /
-            2
-          ) *
-          width;
-
-        ctx.strokeStyle =
-          'rgba(114,246,220,.18)';
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-          scanX,
-          0
-        );
-
-        ctx.lineTo(
-          scanX,
-          height
-        );
-
-        ctx.stroke();
-
-        cancelAnimationFrame(
-          this.frame
-        );
-
-        this.frame =
-          requestAnimationFrame(
-            () =>
-              this.draw()
-          );
-      }
-    }
-
-    clear() {
-      if (
-        !this.canvas ||
-        !this.context
-      ) {
-        return;
-      }
-
-      const rect =
-        this.canvas.getBoundingClientRect();
-
-      const width =
-        rect.width ||
-        600;
-
-      const height =
-        rect.height ||
-        260;
-
-      this.context.clearRect(
-        0,
-        0,
-        width,
-        height
-      );
-    }
-  }
-
-  /* ==========================================================================
-     GAME CONTROLLER
-     ========================================================================== */
-
-  class GameController {
-    constructor() {
-      this.logger =
-        new GameLogger();
-
-      this.bus =
-        new EventBus(
-          this.logger
-        );
-
-      this.state =
-        new StateManager(
-          this.bus,
-          this.logger
-        );
-
-      this.audio =
-        new AudioManager(
-          this.state,
-          this.logger
-        );
-
-      this.ui =
-        new UIManager(
-          this.state,
-          this.bus,
-          this.logger,
-          this.audio
-        );
-
-      this.missions =
-        new MissionManager(
-          this.state,
-          this.bus,
-
-          (...args) =>
-            this.ui.notify(
-              ...args
-            )
-        );
-
-      this.codex =
-        new CodexManager(
-          this.state,
-          this.bus,
-
-          (...args) =>
-            this.ui.notify(
-              ...args
-            )
-        );
-
-      this.save =
-        new SaveManager(
-          this.state,
-          this.bus,
-          this.logger,
-
-          (...args) =>
-            this.ui.notify(
-              ...args
-            )
-        );
-
-      this.settings =
-        new SettingsManager(
-          this.state,
-          this.bus,
-          this.ui,
-          this.logger
-        );
-
-      this.narrative =
-        new NarrativeEngine(
-          this.state,
-          this.bus,
-          this.ui,
-          this.logger,
-          this.audio,
-          this.missions,
-          this.codex
-        );
-
-      this.particles =
-        new ParticleSystem(
-          this.state
-        );
-
-      this.visualLab =
-        new VisualLab(
-          this.state,
-          this.bus,
-          this.logger
-        );
-
-      this.started =
-        false;
-
-      this.playTimer =
-        null;
-
-      this.lastClock =
-        performance.now();
-
-      this.renderScheduled =
-        false;
-
-      this.lastRender =
-        0;
-    }
-
-    init() {
-      if (
-        this.started
-      ) {
-        return;
-      }
-
-      this.started =
-        true;
-
-      window.game =
-        this;
-
-      this.settings.load();
-
-      this.bindSystemEvents();
-
-      this.ui.initBindings(
-        this
-      );
-
-      this.ui.render();
-
-      this.narrative.renderCinematic();
-
-      this.visualLab.init();
-
-      this.particles.start();
-
-      this.startPlayClock();
-
-      this.ui.showScreen(
-        'screenTitle'
-      );
-
-      this.ui.render();
-
-      this.updateContinueButton();
-
-      this.logger.info(
-        'JESUS CHRONICLES inicializado',
-        VERSION
-      );
-
-      this.visualLab.refresh(
-        true
-      );
-    }
-
-    bindSystemEvents() {
-      /*
-       * Estado.
-       */
-      this.bus.on(
-        'state:changed',
-        payload => {
-          this.scheduleRender();
-
-          if (
-            this.shouldAutosave(
-              payload?.source
-            )
-          ) {
-            this.save.schedule();
-          }
-
-          this.visualLab.refresh();
-        }
-      );
-
-      this.bus.on(
-        'state:reset',
-        () => {
-          this.scheduleRender();
-
-          this.visualLab.refresh(
-            true
-          );
-        }
-      );
-
-      /*
-       * Eventos importantes.
-       */
-      [
-        'screen:changed',
-        'scene:changed',
-        'choice:selected',
-        'mission:updated',
-        'codex:updated',
-        'save:completed',
-        'save:loaded',
-        'save:deleted',
-        'settings:changed',
-        'overlay:opened',
-        'overlay:closed'
-      ].forEach(
-        eventName => {
-          this.bus.on(
-            eventName,
-            () => {
-              this.scheduleRender();
-
-              this.visualLab.refresh(
-                true
-              );
-            }
-          );
-        }
-      );
-
-      /*
-       * Erros globais.
-       */
-      window.addEventListener(
-        'error',
-        event => {
-          this.logger.error(
-            'Erro global de JavaScript',
-            event.error ||
-              event.message
-          );
-
-          this.visualLab.refresh(
-            true
-          );
-        }
-      );
-
-      window.addEventListener(
-        'unhandledrejection',
-        event => {
-          this.logger.error(
-            'Promise rejeitada',
-            event.reason
-          );
-
-          this.visualLab.refresh(
-            true
-          );
-        }
-      );
-    }
-
-    scheduleRender() {
-      if (
-        this.renderScheduled
-      ) {
-        return;
-      }
-
-      this.renderScheduled =
-        true;
-
-      requestAnimationFrame(
-        () => {
-          this.renderScheduled =
-            false;
-
-          this.render();
-        }
-      );
-    }
-
-    render() {
-      const now =
-        performance.now();
-
-      if (
-        now -
-          this.lastRender <
-        8
-      ) {
-        return;
-      }
-
-      this.lastRender =
-        now;
-
-      try {
-        this.ui.render();
-
-        this.updateContinueButton();
-      } catch (
-        error
-      ) {
-        this.logger.error(
-          'Erro de renderização',
-          error
-        );
-      }
-    }
-
-    shouldAutosave(
-      source = ''
-    ) {
-      const phase =
-        this.state.get(
-          'phase'
-        );
-
-      if (
-        phase ===
-        'title'
-      ) {
-        return false;
-      }
-
-      if (!source) {
-        return true;
-      }
-
-      const normalized =
-        String(
-          source
-        );
-
-      if (
-        normalized.startsWith(
-          'save'
-        )
-      ) {
-        return false;
-      }
-
-      if (
-        normalized.startsWith(
-          'autosave'
-        )
-      ) {
-        return false;
-      }
-
-      if (
-        normalized ===
-        'clock.tick'
-      ) {
-        return false;
-      }
-
-      if (
-        normalized ===
-        'settings.change'
-      ) {
-        return false;
-      }
-
-      return true;
-    }
-
-    updateContinueButton() {
-      const button =
-        byId(
-          'continueButton'
-        );
-
-      if (!button) {
-        return;
-      }
-
-      const available =
-        this.save.hasSave();
-
-      button.classList.toggle(
-        'hidden',
-        !available
-      );
-
-      button.disabled =
-        false;
-    }
-
-    startPlayClock() {
-      clearInterval(
-        this.playTimer
-      );
-
-      this.lastClock =
-        performance.now();
-
-      this.playTimer =
-        setInterval(
-          () => {
-            const phase =
-              this.state.get(
-                'phase'
-              );
-
-            const now =
-              performance.now();
-
-            const delta =
-              Math.min(
-                5000,
-
-                Math.max(
-                  0,
-
-                  now -
-                    this.lastClock
-                )
-              );
-
-            this.lastClock =
-              now;
-
-            if (
-              phase !==
-              'game'
-            ) {
-              return;
-            }
-
-            this.state.silentDepth +=
-              1;
-
-            try {
-              this.state.state.meta.playSeconds +=
-                delta /
-                1000;
-            } finally {
-              this.state.silentDepth -=
-                1;
-            }
-          },
-
-          PLAY_CLOCK_INTERVAL
-        );
-    }
-
-    startNewGame() {
-      this.audio.click();
 
       clearTimeout(
         this.narrative.timer
@@ -7455,529 +3557,619 @@
       this.narrative.typing =
         false;
 
-      this.narrative.current =
-        null;
+      const output =
+        byId(
+          'dialogueText'
+        );
 
-      this.narrative.choiceLocked =
-        false;
+      if (
+        output
+      ) {
+        output.textContent =
+          this.narrative.fullText;
+      }
 
-      this.narrative.selectingChoice =
-        false;
+      byId(
+        'typingCursor'
+      )?.classList.remove(
+        'active'
+      );
+    }
 
-      this.narrative.choiceTransaction +=
-        1;
+    /* =======================================================================
+       TRANSIÇÃO PARA ATO I
+       ======================================================================= */
 
-      this.state.reset(
-        true
+    finishPrologue() {
+      const current =
+        this.getCurrentScene();
+
+      if (
+        current?.id !==
+        'p17_transition'
+      ) {
+        return;
+      }
+
+      /*
+       * Prólogo concluído.
+       */
+      this.state.set(
+        'prologue.completed',
+        true,
+        'prologue.complete'
       );
 
       this.state.set(
-        'meta.createdAt',
-        nowISO(),
-        'newGame'
+        'prologue.active',
+        false,
+        'prologue.complete'
+      );
+
+      this.state.set(
+        'prologue.transitionReady',
+        true,
+        'prologue.complete'
+      );
+
+      this.state.set(
+        'campaign.currentAct',
+        ACT_I_ID,
+        'prologue.toAct1'
+      );
+
+      this.state.set(
+        'campaign.acts.act1.status',
+        'active',
+        'prologue.toAct1'
+      );
+
+      this.state.set(
+        'world.act',
+        'ATO I',
+        'prologue.toAct1'
+      );
+
+      this.state.set(
+        'narrative.act',
+        1,
+        'prologue.toAct1'
+      );
+
+      this.game.ui.notify(
+        'PRÓLOGO CONCLUÍDO',
+        'O Ato I — O Mundo Destruído foi desbloqueado.',
+        'success'
+      );
+
+      this.bus.emit(
+        'campaign:actChanged',
+        {
+          from:
+            PROLOGUE_ID,
+
+          to:
+            ACT_I_ID,
+
+          source:
+            'prologue'
+        }
+      );
+
+      this.createAct1Transition();
+    }
+
+    createAct1Transition() {
+      let overlay =
+        byId(
+          'jcPrologueActTransition'
+        );
+
+      if (!overlay) {
+        overlay =
+          create(
+            'div',
+            'jc-prologue-act-transition'
+          );
+
+        overlay.id =
+          'jcPrologueActTransition';
+
+        overlay.innerHTML =
+          `
+            <div class="jc-prologue-act-transition-inner">
+              <span class="jc-prologue-act-kicker">
+                ARQUIVO CRONOLÓGICO // PRÓLOGO ENCERRADO
+              </span>
+
+              <h2>
+                ATO I
+              </h2>
+
+              <strong>
+                O MUNDO DESTRUÍDO
+              </strong>
+
+              <p>
+                Você ainda não sabe se veio salvar o mundo
+                ou apenas encontrar alguém que o salve por você.
+              </p>
+
+              <button
+                type="button"
+                id="jcEnterAct1"
+              >
+                CONTINUAR
+              </button>
+            </div>
+          `;
+
+        document.body.appendChild(
+          overlay
+        );
+
+        const style =
+          create(
+            'style'
+          );
+
+        style.id =
+          'jcPrologueActTransitionStyle';
+
+        style.textContent =
+          `
+            .jc-prologue-act-transition {
+              position: fixed;
+              inset: 0;
+              z-index: 999;
+              display: grid;
+              place-items: center;
+              padding: 24px;
+              background:
+                radial-gradient(
+                  circle at 50% 35%,
+                  rgba(76,158,255,.10),
+                  transparent 34%
+                ),
+                rgba(2,4,9,.96);
+              backdrop-filter: blur(20px);
+              opacity: 0;
+              pointer-events: none;
+              transition: opacity .45s ease;
+            }
+
+            .jc-prologue-act-transition.active {
+              opacity: 1;
+              pointer-events: auto;
+            }
+
+            .jc-prologue-act-transition-inner {
+              width: min(720px, 92vw);
+              padding: 42px;
+              text-align: center;
+              border: 1px solid rgba(139,200,255,.18);
+              border-radius: 22px;
+              background: rgba(7,12,21,.88);
+              box-shadow:
+                0 30px 100px rgba(0,0,0,.48),
+                inset 0 0 60px rgba(139,200,255,.03);
+            }
+
+            .jc-prologue-act-kicker {
+              color: #8bc8ff;
+              font-size: .65rem;
+              font-weight: 800;
+              letter-spacing: .22em;
+            }
+
+            .jc-prologue-act-transition h2 {
+              margin: 16px 0 2px;
+              font-size: clamp(4rem,12vw,8rem);
+              line-height: .85;
+              letter-spacing: -.06em;
+              color: #eef7ff;
+            }
+
+            .jc-prologue-act-transition strong {
+              display: block;
+              color: #72f6dc;
+              font-size: .84rem;
+              letter-spacing: .18em;
+            }
+
+            .jc-prologue-act-transition p {
+              max-width: 560px;
+              margin: 24px auto 28px;
+              color: #92a6bb;
+              font-size: .92rem;
+              line-height: 1.7;
+            }
+
+            .jc-prologue-act-transition button {
+              min-width: 190px;
+              padding: 13px 22px;
+              border: 1px solid rgba(139,200,255,.34);
+              border-radius: 10px;
+              color: #eef7ff;
+              background: rgba(139,200,255,.10);
+              cursor: pointer;
+              font-weight: 800;
+              letter-spacing: .12em;
+              transition:
+                transform .18s ease,
+                background .18s ease,
+                border-color .18s ease;
+            }
+
+            .jc-prologue-act-transition button:hover {
+              transform: translateY(-2px);
+              background: rgba(139,200,255,.18);
+              border-color: rgba(139,200,255,.55);
+            }
+
+            @media (max-width: 600px) {
+              .jc-prologue-act-transition-inner {
+                padding: 28px 20px;
+              }
+            }
+          `;
+
+        document.head.appendChild(
+          style
+        );
+
+        byId(
+          'jcEnterAct1'
+        )?.addEventListener(
+          'click',
+          () => {
+            this.enterAct1();
+          }
+        );
+      }
+
+      requestAnimationFrame(
+        () => {
+          overlay.classList.add(
+            'active'
+          );
+        }
+      );
+    }
+
+    enterAct1() {
+      const overlay =
+        byId(
+          'jcPrologueActTransition'
+        );
+
+      overlay?.classList.remove(
+        'active'
+      );
+
+      /*
+       * O Ato I ainda é FUTURO.
+
+       * Não usamos a máquina.
+       * Não viajamos ao passado.
+       * Apenas transferimos o controle
+       * narrativo para o próximo módulo.
+       */
+
+      this.state.set(
+        'phase',
+        'game',
+        'act1.enter'
+      );
+
+      this.state.set(
+        'world.act',
+        'ATO I',
+        'act1.enter'
+      );
+
+      this.state.set(
+        'world.era',
+        'FUTURO',
+        'act1.enter'
+      );
+
+      this.state.set(
+        'world.location',
+        'mega_city',
+        'act1.enter'
+      );
+
+      /*
+       * O próximo módulo narrativo deverá
+       * fornecer sua cena inicial.
+       *
+       * Enquanto ele não existe,
+       * apresentamos um ponto de handoff
+       * seguro em vez de enviar o jogador
+       * ao passado.
+       */
+
+      this.game.ui.notify(
+        'ATO I DESBLOQUEADO',
+        'A próxima camada narrativa agora assume o controle da campanha.',
+        'success'
+      );
+
+      this.state.set(
+        'campaign.nextModule',
+        'act1',
+        'act1.handoff'
       );
 
       this.state.set(
         'narrative.currentScene',
-        'g_intro',
-        'newGame'
-      );
-
-      this.state.set(
-        'narrative.cinematicIndex',
-        0,
-        'newGame'
-      );
-
-      this.ui.transition(
-        () => {
-          this.ui.showScreen(
-            'screenCinematic'
-          );
-
-          this.narrative.renderCinematic();
-        }
-      );
-
-      this.visualLab.refresh(
-        true
-      );
-    }
-
-    continueGame() {
-      return this.loadSavedGame();
-    }
-
-    loadSavedGame() {
-      const loaded =
-        this.save.load();
-
-      if (!loaded) {
-        this.render();
-
-        return false;
-      }
-
-      const phase =
-        this.state.get(
-          'phase'
-        );
-
-      this.ui.transition(
-        () => {
-          if (
-            phase ===
-            'cinematic'
-          ) {
-            this.ui.showScreen(
-              'screenCinematic'
-            );
-
-            this.narrative.renderCinematic();
-
-            return;
-          }
-
-          if (
-            phase ===
-            'game'
-          ) {
-            this.ui.showScreen(
-              'screenGame'
-            );
-
-            this.narrative.goto(
-              this.state.get(
-                'narrative.currentScene'
-              ) ||
-                'g_intro'
-            );
-
-            return;
-          }
-
-          this.ui.showScreen(
-            'screenTitle'
-          );
-        }
-      );
-
-      this.render();
-
-      this.visualLab.refresh(
-        true
-      );
-
-      return true;
-    }
-
-    deleteSaveWithConfirm() {
-      if (
-        !this.save.hasSave()
-      ) {
-        return false;
-      }
-
-      const confirmed =
-        window.confirm(
-          'Apagar o save local desta crônica?'
-        );
-
-      if (
-        !confirmed
-      ) {
-        return false;
-      }
-
-      const result =
-        this.save.delete();
-
-      this.render();
-
-      return result;
-    }
-
-    restartToTitle() {
-      clearTimeout(
-        this.narrative.timer
-      );
-
-      this.narrative.typing =
-        false;
-
-      this.narrative.choiceLocked =
-        false;
-
-      this.narrative.selectingChoice =
-        false;
-
-      this.narrative.choiceTransaction +=
-        1;
-
-      this.ui.transition(
-        () => {
-          this.ui.showScreen(
-            'screenTitle'
-          );
-        }
-      );
-
-      this.visualLab.refresh(
-        true
-      );
-    }
-
-    inspect() {
-      if (
-        this.state.get(
-          'phase'
-        ) !==
-        'game'
-      ) {
-        return;
-      }
-
-      this.audio.click();
-
-      this.state.increment(
-        'world.inspectCount',
-        1,
-        'inspect'
-      );
-
-      this.state.increment(
-        'statistics.inspections',
-        1,
-        'inspect'
-      );
-
-      const locationId =
-        this.state.get(
-          'world.location'
-        );
-
-      const messages = {
-        mega_city:
-          'Sinais civis ainda funcionam em intervalos. Há zonas onde a população resiste fora dos protocolos.',
-
-        chrono_lab:
-          'O núcleo temporal apresenta microvariações incompatíveis com a previsão oficial.',
-
-        archive:
-          'Os registros ocultos possuem lacunas deliberadas. Alguém decidiu quais partes da história deveriam sobreviver.',
-
-        transit:
-          'A passagem não é um corredor: é uma sobreposição de possibilidades.',
-
-        galilee:
-          'Antes de interferir, observe. Pessoas reais não sabem que você veio de uma era diferente.'
-      };
-
-      this.missions.progress(
-        'intro',
-        1
-      );
-
-      this.ui.notify(
-        `LEITURA // ${safeText(
-          LOCATIONS[
-            locationId
-          ]?.name ||
-            locationId
-        ).toUpperCase()}`,
-
-        messages[
-          locationId
-        ] ||
-          'Nenhum dado adicional disponível.',
-
-        'info'
+        'act1_entry',
+        'act1.handoff'
       );
 
       this.bus.emit(
-        'world:inspected',
+        'campaign:moduleReady',
         {
-          location:
-            locationId
+          module:
+            'act1',
+
+          from:
+            'prologue'
         }
       );
+
+      this.renderAct1Placeholder();
     }
 
-    activateSystemTab(
-      tabId
-    ) {
-      const allowed =
-        new Set([
-          'missionTab',
-          'timelineTab',
-          'codexTab'
-        ]);
+    renderAct1Placeholder() {
+      /*
+       * Não inventa uma sequência do Ato I que ainda
+       * não foi implementada.
+       *
+       * O mundo continua no futuro.
+       */
 
-      const target =
-        allowed.has(
-          tabId
-        )
-          ? tabId
-          : 'missionTab';
+      const speaker =
+        byId(
+          'dialogueSpeaker'
+        );
 
-      qsa(
-        '.system-tab'
-      ).forEach(
-        button => {
-          const active =
-            button.dataset.tab ===
-            target;
+      const role =
+        byId(
+          'dialogueSpeakerRole'
+        );
 
-          button.classList.toggle(
-            'active',
-            active
-          );
+      const type =
+        byId(
+          'dialogueType'
+        );
 
-          button.setAttribute(
-            'aria-selected',
-            String(
-              active
-            )
-          );
-        }
-      );
+      const text =
+        byId(
+          'dialogueText'
+        );
 
-      qsa(
-        '.system-tab-content'
-      ).forEach(
-        panel => {
-          panel.classList.toggle(
-            'active',
-            panel.id ===
-              target
-          );
-        }
-      );
+      const choices =
+        byId(
+          'choiceContainer'
+        );
 
-      this.audio.click();
+      if (speaker) {
+        speaker.textContent =
+          'PROTOCOLO CRONOLÓGICO';
+      }
 
-      this.bus.emit(
-        'system:tabChanged',
-        {
-          id:
-            target
-        }
-      );
+      if (role) {
+        role.textContent =
+          'ATO I';
+      }
 
-      this.visualLab.refresh(
+      if (type) {
+        type.textContent =
+          'TRANSIÇÃO';
+      }
+
+      if (text) {
+        text.textContent =
+          'O registro do Ato I foi desbloqueado. A campanha agora entra na etapa de investigação do mundo destruído.';
+      }
+
+      choices?.replaceChildren();
+
+      this.game.visualLab?.refresh(
         true
       );
     }
 
-    handleKey(
-      event
+    /* =======================================================================
+       RESUMO / SAVE
+       ======================================================================= */
+
+    resumeAfterPrologue(
+      current
     ) {
-      if (!event) {
-        return;
-      }
+      this.game.ui.showScreen(
+        'screenGame'
+      );
 
-      /*
-       * CTRL/CMD + S
-       */
       if (
-        (
-          event.ctrlKey ||
-          event.metaKey
-        ) &&
-        event.key.toLowerCase() ===
-          's'
-      ) {
-        event.preventDefault();
-
-        this.save.save();
-
-        return;
-      }
-
-      /*
-       * ESC
-       */
-      if (
-        event.key ===
-        'Escape'
-      ) {
-        if (
-          this.ui.closeTopOverlay()
-        ) {
-          event.preventDefault();
-        }
-
-        return;
-      }
-
-      const phase =
-        this.state.get(
-          'phase'
-        );
-
-      /*
-       * CINEMÁTICA
-       */
-      if (
-        phase ===
-        'cinematic'
-      ) {
-        if (
-          event.key ===
-          'Enter'
-        ) {
-          event.preventDefault();
-
-          this.narrative.nextCinematic();
-        }
-
-        return;
-      }
-
-      /*
-       * JOGO
-       */
-      if (
-        phase !==
-        'game'
-      ) {
-        return;
-      }
-
-      /*
-       * INSPEÇÃO
-       */
-      if (
-        event.key.toLowerCase() ===
-        'e'
-      ) {
-        event.preventDefault();
-
-        this.inspect();
-
-        return;
-      }
-
-      /*
-       * ENTER
-       */
-      if (
-        event.key ===
-        'Enter'
-      ) {
-        event.preventDefault();
-
-        this.narrative.continue();
-
-        return;
-      }
-
-      /*
-       * ESCOLHAS 1-9
-       */
-      if (
-        /^[1-9]$/.test(
-          event.key
+        this.isPrologueScene(
+          current
         )
       ) {
-        event.preventDefault();
-
-        this.narrative.selectChoiceByIndex(
-          Number(
-            event.key
-          ) - 1
+        this.narrative.goto(
+          current
         );
+
+        return;
       }
+
+      if (
+        this.state.get(
+          'prologue.completed'
+        )
+      ) {
+        this.renderAct1Placeholder();
+
+        return;
+      }
+
+      this.narrative.goto(
+        'p00_operation'
+      );
+    }
+
+    bindEvents() {
+      this.patchContinue();
+
+      this.bus.on(
+        'prologue:explorationComplete',
+        () => {
+          this.state.set(
+            'prologue.objective',
+            'Retorne ao Complexo Cronos.',
+            'prologue.objective.return'
+          );
+        }
+      );
+
+      this.bus.on(
+        'prologue:poiInspected',
+        payload => {
+          if (
+            payload?.id ===
+            'civilian_zone'
+          ) {
+            this.state.set(
+              'prologue.civilianContact',
+              true,
+              'prologue.civilian'
+            );
+          }
+
+          if (
+            payload?.id ===
+            'cronos_gate'
+          ) {
+            this.state.set(
+              'prologue.cronosObserved',
+              true,
+              'prologue.cronos'
+            );
+          }
+        }
+      );
+
+      /*
+       * Autosave quando houver mudança relevante
+       * no Prólogo.
+       */
+      this.bus.on(
+        'choice:selected',
+        payload => {
+          if (
+            payload?.source ===
+            'prologue'
+          ) {
+            this.game.save?.schedule();
+          }
+        }
+      );
     }
   }
 
-  /* ==========================================================================
-     BOOT
-     ========================================================================== */
+  /* =========================================================================
+     INICIALIZAÇÃO
+     ========================================================================= */
 
-  const boot = () => {
-    try {
-      const game =
-        new GameController();
+  waitForGame(
+    game => {
+      if (
+        game.prologueController
+      ) {
+        return;
+      }
 
-      game.init();
+      const controller =
+        new PrologueController(
+          game
+        );
 
-      window.game =
-        game;
+      controller.init();
 
-      document.documentElement.dataset.jcBoot =
-        'ok';
+      game.prologueController =
+        controller;
+
+      /*
+       * API pública.
+       */
+      window.JC =
+        window.JC ||
+        {};
+
+      window.JC.prologue =
+        controller;
+
+      window.JC.prologueScenes =
+        PROLOGUE_SCENES;
+
+      window.JC.prologuePOIs =
+        PROLOGUE_POIS;
+
+      /*
+       * Diagnóstico.
+       */
+      console.group(
+        '[JC PROLOGUE]'
+      );
 
       console.info(
-        '[JC] Boot concluído'
-      );
-    } catch (
-      error
-    ) {
-      console.error(
-        '[JC] Falha crítica na inicialização',
-        error
+        'Prólogo:',
+        true
       );
 
-      document.documentElement.dataset.jcBoot =
-        'error';
+      console.info(
+        'Cenas:',
+        Object.keys(
+          PROLOGUE_SCENES
+        ).length
+      );
 
-      const stack =
-        byId(
-          'notificationStack'
-        );
+      console.info(
+        'Pontos de exploração:',
+        Object.keys(
+          PROLOGUE_POIS
+        ).length
+      );
 
-      if (stack) {
-        const item =
-          document.createElement(
-            'div'
-          );
+      console.info(
+        'Separação para Ato I:',
+        ACT_I_ID
+      );
 
-        item.className =
-          'notification notification-error show';
+      console.groupEnd();
 
-        const title =
-          document.createElement(
-            'strong'
-          );
-
-        title.textContent =
-          'Falha ao iniciar';
-
-        const message =
-          document.createElement(
-            'span'
-          );
-
-        message.textContent =
-          'O sistema detectou um erro na inicialização. Verifique o console do navegador.';
-
-        item.append(
-          title,
-          message
-        );
-
-        stack.appendChild(
-          item
+      /*
+       * NOVO JOGO:
+       *
+       * O botão original foi substituído pelo
+       * Prologue Controller.
+       *
+       * Atualiza também o estado inicial caso
+       * a página tenha acabado de carregar.
+       */
+      if (
+        game.state.get(
+          'phase'
+        ) ===
+        'title'
+      ) {
+        ensurePrologueState(
+          game
         );
       }
     }
-  };
-
-  if (
-    document.readyState ===
-    'loading'
-  ) {
-    document.addEventListener(
-      'DOMContentLoaded',
-      boot,
-      {
-        once:
-          true
-      }
-    );
-  } else {
-    boot();
-  }
+  );
 
 })();
